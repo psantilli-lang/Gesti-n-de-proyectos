@@ -1,0 +1,6 @@
+{
+  "name": "Gestión de Proyectos de Mejora SAP",
+  "description": "Sistema integral de gestión de proyectos de mejora SAP con sincronización automática en Google Sheets, seguimiento por etapas, cronograma plan vs. real, barrida semanal y control de roles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
