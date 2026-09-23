@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { AppUser, UserSession, UserRole } from '../types/project';
 import { storageService } from '../services/storageService';
+import { firestoreService } from '../services/firestoreService';
 import { isPMO } from '../utils/helpers';
 
 interface UserManagementModalProps {
@@ -98,6 +99,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     });
 
     if (res.success && res.user) {
+      firestoreService.saveUser(res.user).catch((e) => console.warn('Firestore save user error:', e));
       setSuccessMsg(`Usuario "${res.user.name}" creado con éxito.`);
       // Clear form
       setNewName('');
@@ -123,6 +125,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
     const res = storageService.updateUser(userToEdit);
     if (res.success) {
+      firestoreService.saveUser(userToEdit).catch((e) => console.warn('Firestore update user error:', e));
       setSuccessMsg(`Usuario "${userToEdit.name}" actualizado correctamente.`);
       setUserToEdit(null);
       refreshUsers();
@@ -156,6 +159,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
     const res = storageService.changePassword(userForPasswordChange.id, changePasswordVal);
     if (res.success) {
+      const updatedUser = storageService.getUsers().find((u) => u.id === userForPasswordChange.id);
+      if (updatedUser) {
+        firestoreService.saveUser(updatedUser).catch((e) => console.warn('Firestore password change error:', e));
+      }
       setSuccessMsg(`Contraseña de "${userForPasswordChange.name}" actualizada con éxito.`);
       setUserForPasswordChange(null);
       setChangePasswordVal('');
@@ -180,6 +187,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
     const res = storageService.deleteUser(user.id);
     if (res.success) {
+      firestoreService.deleteUser(user.id).catch((e) => console.warn('Firestore delete user error:', e));
       setSuccessMsg(`Usuario "${user.name}" eliminado.`);
       refreshUsers();
       setTimeout(() => setSuccessMsg(null), 2500);

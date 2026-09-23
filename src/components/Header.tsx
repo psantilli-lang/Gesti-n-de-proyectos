@@ -16,6 +16,7 @@ import {
   FileSpreadsheet,
   ExternalLink,
   Settings,
+  Mail,
 } from 'lucide-react';
 import { UserSession, SAP_MODULES_DATA } from '../types/project';
 import { isPMO, getRoleDisplayName } from '../utils/helpers';
@@ -42,6 +43,9 @@ interface HeaderProps {
   totalProjects: number;
   pendingActionsCount: number;
   myPendingTasksCount?: number;
+  isFirestoreConnected?: boolean;
+  googleConnectedEmail?: string | null;
+  onOpenGoogleAccount?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -59,6 +63,9 @@ export const Header: React.FC<HeaderProps> = ({
   totalProjects,
   pendingActionsCount,
   myPendingTasksCount = 0,
+  isFirestoreConnected = false,
+  googleConnectedEmail = null,
+  onOpenGoogleAccount,
 }) => {
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs print:hidden">
@@ -108,6 +115,27 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* User Session & Management Section */}
             <div className="flex items-center gap-2">
+              {/* Firestore Real-time Status Badge */}
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                title={
+                  isFirestoreConnected
+                    ? 'Base de datos en la nube Firebase Firestore conectada en tiempo real'
+                    : 'Conectando con Firebase Firestore...'
+                }
+              >
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 ${
+                    isFirestoreConnected
+                      ? 'bg-emerald-500 shadow-xs shadow-emerald-500/60 animate-pulse'
+                      : 'bg-amber-400'
+                  }`}
+                />
+                <span className="text-[11px] font-medium text-slate-600 hidden sm:inline">
+                  {isFirestoreConnected ? 'Firestore en vivo' : 'Conectando...'}
+                </span>
+              </div>
+
               {/* PMO User Management Button */}
               {isPMO(currentUser) && onOpenUserManagement && (
                 <button
@@ -262,6 +290,42 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Right: Actions */}
           <div className="flex items-center gap-2 shrink-0 ml-auto">
+            {/* Google / Gmail Account Linking Button - Exclusively visible and manageable by PMO */}
+            {isPMO(currentUser) && onOpenGoogleAccount && (
+              googleConnectedEmail ? (
+                <button
+                  type="button"
+                  onClick={onOpenGoogleAccount}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-blue-900 text-xs font-semibold transition-all cursor-pointer shadow-2xs whitespace-nowrap active:scale-[0.98]"
+                  title="Cuenta de correo vinculada para envíos automáticos (Gestión exclusiva PMO). Clic para opciones o cambiar cuenta."
+                >
+                  <Mail className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <span className="hidden sm:inline font-bold text-blue-700">Gmail:</span>
+                  <span className="max-w-[120px] md:max-w-[170px] truncate text-slate-800 font-medium">
+                    {googleConnectedEmail}
+                  </span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 inline-block" title="Conectado y listo para enviar correos" />
+                  <span className="px-1 py-0.2 bg-blue-200/80 text-blue-900 rounded text-[9px] font-extrabold uppercase ml-0.5">
+                    PMO
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onOpenGoogleAccount}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-500 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all cursor-pointer shadow-xs whitespace-nowrap active:scale-[0.98]"
+                  title="Vincular cuenta de Google / Gmail para el envío de notificaciones automáticas (Exclusivo PMO)"
+                >
+                  <Mail className="w-3.5 h-3.5 text-white shrink-0" />
+                  <span>Vincular Gmail</span>
+                  <span className="w-2 h-2 rounded-full bg-amber-300 shrink-0 animate-pulse" />
+                  <span className="px-1 py-0.2 bg-blue-800 text-blue-100 rounded text-[9px] font-extrabold uppercase ml-0.5">
+                    PMO
+                  </span>
+                </button>
+              )
+            )}
+
             {/* Google Sheets Direct Open & Sync Controls */}
             {onOpenGoogleSheetsSync && (
               <div className="flex items-center rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100/80 transition-colors shadow-2xs overflow-hidden">

@@ -159,9 +159,22 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
     ]);
   };
 
-  const handleUpdateTeamMember = (id: string, field: 'name' | 'role', val: string) => {
+  const handleUpdateTeamMember = (id: string, field: 'name' | 'role' | 'email', val: string) => {
     setTeam(
-      team.map((m) => (m.id === id ? { ...m, [field]: val } : m))
+      team.map((m) => {
+        if (m.id !== id) return m;
+        const updated = { ...m, [field]: val };
+        // If updating name and email is empty, check allUsers to autofill
+        if (field === 'name' && !m.email && allUsers) {
+          const match = allUsers.find(
+            (u) => u.name.toLowerCase().trim() === val.toLowerCase().trim()
+          );
+          if (match?.email) {
+            updated.email = match.email;
+          }
+        }
+        return updated;
+      })
     );
   };
 
@@ -291,7 +304,14 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
       currentSituationFiles,
       improvementNeed: improvementNeed.trim(),
       improvementNeedFiles,
-      team: team.filter((m) => m.name.trim() !== ''),
+      team: team
+        .filter((m) => m.name.trim() !== '')
+        .map((m) => ({
+          ...m,
+          name: m.name.trim(),
+          role: m.role.trim(),
+          email: m.email?.trim() || undefined,
+        })),
       priority: Number(priority) || 1,
       state,
       schedule,
@@ -613,7 +633,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
 
             <div className="space-y-2">
               {team.map((member) => (
-                <div key={member.id} className="flex items-center gap-2">
+                <div key={member.id} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
                   <input
                     type="text"
                     placeholder="Nombre y Apellido (ej: Ing. Juan Gómez)"
@@ -623,16 +643,25 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                   />
                   <input
                     type="text"
-                    placeholder="Rol (ej: Líder Funcional, Consultor SAP, Key User)"
+                    placeholder="Rol (ej: Líder, Consultor SAP)"
                     value={member.role}
                     onChange={(e) => handleUpdateTeamMember(member.id, 'role', e.target.value)}
-                    className="w-48 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full sm:w-44 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <input
+                    type="email"
+                    placeholder="Email (cualquier dominio: @gmail, @empresa, etc.)"
+                    value={member.email || ''}
+                    onChange={(e) => handleUpdateTeamMember(member.id, 'email', e.target.value)}
+                    className="w-full sm:w-56 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    title="Cualquier dirección de correo (Gmail, Outlook, corporativo) para notificaciones automáticas"
                   />
                   {team.length > 1 && (
                     <button
                       type="button"
                       onClick={() => handleRemoveTeamMember(member.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded"
+                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded self-end sm:self-center cursor-pointer"
+                      title="Quitar integrante"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

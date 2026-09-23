@@ -43,8 +43,12 @@ import {
   Edit,
   Tag,
   Check,
-  Eye
+  Eye,
+  Mail,
+  Send
 } from 'lucide-react';
+import { emailNotificationService } from '../services/emailNotificationService';
+import { getAccessToken, getCurrentGoogleUser } from '../services/googleAuthService';
 
 interface ProjectDetailModalProps {
   project: SAPProject;
@@ -73,6 +77,87 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
   const canCancel = canUserCancelProject(currentUser, project);
   const canAddAction = canUserAddAction(currentUser, project);
   const canPrioritize = canUserAccessReportingAndPrioritization(currentUser);
+
+  // Email Notification action feedback state
+  const [emailStatusMsg, setEmailStatusMsg] = useState<{ text: string; isError?: boolean } | null>(null);
+  const [isSendingEmail, setIsSendingEmail] = useState<boolean>(false);
+
+  const showEmailStatus = (text: string, isError = false) => {
+    setEmailStatusMsg({ text, isError });
+    setTimeout(() => setEmailStatusMsg(null), 5000);
+  };
+
+  const handleNotifyTeamByEmail = async () => {
+    const token = getAccessToken();
+    if (!token) {
+      alert('⚠️ Para enviar notificaciones automáticas por correo, primero vinculá tu cuenta de Gmail desde el botón "Vincular Gmail" en la barra superior.');
+      return;
+    }
+
+    const teamEmails = (project.team || [])
+      .map((m) => m.email?.trim() || emailNotificationService.resolveUserEmail(m.name, project))
+      .filter((e): e is string => !!e);
+
+    if (teamEmails.length === 0) {
+      alert('El proyecto no tiene integrantes con correo electrónico asignado. Podés editar el proyecto y agregar sus direcciones de correo en la sección de Equipo.');
+      return;
+    }
+
+    try {
+      setIsSendingEmail(true);
+      const sender = getCurrentGoogleUser()?.email || currentUser.email || 'notificaciones@crucianelli.com';
+      const log = await emailNotificationService.sendNewProjectNotification({
+        project,
+        accessToken: token,
+        senderEmail: sender,
+      });
+
+      if (log.status === 'sent') {
+        showEmailStatus(`✅ Notificación enviada exitosamente a ${teamEmails.length} integrante(s) del equipo (${teamEmails.join(', ')}).`);
+      } else {
+        showEmailStatus(`⚠️ Error al enviar: ${log.error || 'Verificá permisos de Gmail'}`, true);
+      }
+    } catch (err: any) {
+      showEmailStatus(`⚠️ Error al enviar: ${err?.message || 'Fallo de conexión'}`, true);
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const handleNotifyActionResponsible = async (action: StageAction) => {
+    const token = getAccessToken();
+    if (!token) {
+      alert('⚠️ Para enviar notificaciones por correo, primero vinculá tu cuenta de Gmail desde el botón "Vincular Gmail" en la barra superior.');
+      return;
+    }
+
+    const recipient = emailNotificationService.resolveUserEmail(action.responsible, project);
+    if (!recipient) {
+      alert(`No se encontró un correo electrónico para "${action.responsible}". Podés asignarle su correo editando el proyecto o el responsable.`);
+      return;
+    }
+
+    try {
+      setIsSendingEmail(true);
+      const sender = getCurrentGoogleUser()?.email || currentUser.email || 'notificaciones@crucianelli.com';
+      const log = await emailNotificationService.sendNewActionNotification({
+        project,
+        action,
+        accessToken: token,
+        senderEmail: sender,
+      });
+
+      if (log.status === 'sent') {
+        showEmailStatus(`✅ Notificación de la acción enviada a ${action.responsible} (${recipient}).`);
+      } else {
+        showEmailStatus(`⚠️ Error al enviar: ${log.error || 'Verificá permisos de Gmail'}`, true);
+      }
+    } catch (err: any) {
+      showEmailStatus(`⚠️ Error al enviar: ${err?.message || 'Fallo de conexión'}`, true);
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
 
   // Update project state with security enforcement
   const handleStateChange = (newState: ProjectState) => {
@@ -251,24 +336,39 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
 
           {/* Quick status controls in header */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400 font-semibold">Estado del Proyecto:</span>
-              <select
-                value={project.state}
-                onChange={(e) => handleStateChange(e.target.value as ProjectState)}
-                className="bg-slate-800 border border-slate-700 text-white font-bold rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer text-xs"
-                title="Cambiar estado del proyecto"
-              >
-                {ALL_PROJECT_STATES.map((st) => {
-                  const isCancel = st === '8- Cancelado';
-                  const disabledOpt = isCancel && !canCancel;
-                  return (
-                    <option key={st} value={st} disabled={disabledOpt}>
-                      {st} {disabledOpt ? ' (Solo PMO)' : ''}
-                    </option>
-                  );
-                })}
-              </select>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 font-semibold">Estado del Proyecto:</span>
+                <select
+                  value={project.state}
+                  onChange={(e) => handleStateChange(e.target.value as ProjectState)}
+                  className="bg-slate-800 border border-slate-700 text-white font-bold rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer text-xs"
+                  title="Cambiar estado del proyecto"
+                >
+                  {ALL_PROJECT_STATES.map((st) => {
+                    const isCancel = st === '8- Cancelado';
+                    const disabledOpt = isCancel && !canCancel;
+                    return (
+                      <option key={st} value={st} disabled={disabledOpt}>
+                        {st} {disabledOpt ? ' (Solo PMO)' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {isPMO(currentUser) && (
+                <button
+                  type="button"
+                  onClick={handleNotifyTeamByEmail}
+                  disabled={isSendingEmail}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-white border border-blue-500/40 font-semibold transition-colors cursor-pointer text-xs"
+                  title="Reenviar o emitir notificación por correo de este proyecto a todos los miembros del equipo"
+                >
+                  <Mail className="w-3.5 h-3.5 text-blue-400" />
+                  <span>{isSendingEmail ? 'Enviando...' : 'Reenviar Mail de Alta'}</span>
+                </button>
+              )}
             </div>
 
             <div className="flex items-center gap-3 text-slate-300">
@@ -282,6 +382,25 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
               </span>
             </div>
           </div>
+
+          {emailStatusMsg && (
+            <div
+              className={`mt-2 px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between gap-2 border ${
+                emailStatusMsg.isError
+                  ? 'bg-rose-500/20 text-rose-200 border-rose-500/40'
+                  : 'bg-emerald-500/20 text-emerald-200 border-emerald-500/40'
+              }`}
+            >
+              <span>{emailStatusMsg.text}</span>
+              <button
+                type="button"
+                onClick={() => setEmailStatusMsg(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Navigation Tabs */}
@@ -652,19 +771,33 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                             </div>
                           </div>
 
-                          {/* Action update and delete buttons */}
+                          {/* Action update, notify and delete buttons */}
                           <div className="flex flex-col items-end gap-1.5">
-                            <button
-                              onClick={() => onOpenEditAction(project, action)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap ${
-                                canEdit
-                                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
-                                  : 'bg-slate-100 text-slate-500 border border-slate-200'
-                              }`}
-                            >
-                              <MessageSquare className="w-3.5 h-3.5" />
-                              <span>{canEdit ? 'Editar Estado / Comentario' : 'Ver Comentario'}</span>
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              {/* Send email button */}
+                              <button
+                                type="button"
+                                onClick={() => handleNotifyActionResponsible(action)}
+                                disabled={isSendingEmail}
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-900 border border-blue-200 transition-colors cursor-pointer shadow-2xs whitespace-nowrap active:scale-95"
+                                title={`Enviar o reenviar correo de esta acción a ${action.responsible}`}
+                              >
+                                <Mail className="w-3.5 h-3.5 text-blue-600" />
+                                <span className="hidden sm:inline">Avisar por mail</span>
+                              </button>
+
+                              <button
+                                onClick={() => onOpenEditAction(project, action)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors whitespace-nowrap ${
+                                  canEdit
+                                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                                    : 'bg-slate-100 text-slate-500 border border-slate-200'
+                                }`}
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                <span>{canEdit ? 'Editar Estado / Comentario' : 'Ver Comentario'}</span>
+                              </button>
+                            </div>
 
                             {canDeleteAct && (
                               <button

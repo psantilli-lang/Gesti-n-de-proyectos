@@ -1,22 +1,18 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
-  getAuth, 
   signInWithPopup, 
   GoogleAuthProvider, 
   onAuthStateChanged, 
   User, 
   signOut 
 } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
-
-// Initialize Firebase App singleton
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+import { app, auth } from './firebase';
+export { auth };
 
 // Workspace OAuth Scopes
 export const WORKSPACE_SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/gmail.send',
 ];
 
 const provider = new GoogleAuthProvider();
@@ -27,8 +23,19 @@ provider.setCustomParameters({
 
 // Flag to indicate if we are in the middle of a sign-in flow.
 let isSigningIn = false;
-// Cache the access token in memory (never in localStorage).
-let cachedAccessToken: string | null = null;
+
+const SESSION_TOKEN_KEY = 'google_workspace_access_token';
+const SESSION_USER_KEY = 'google_workspace_user_email';
+
+// Cache the access token in memory and sessionStorage
+let cachedAccessToken: string | null = (() => {
+  try {
+    return sessionStorage.getItem(SESSION_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+})();
+
 let currentUserProfile: User | null = null;
 
 // Initialize auth state listener. Call this on app load.
@@ -38,14 +45,10 @@ export const initAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     currentUserProfile = user;
-    if (user) {
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        cachedAccessToken = null;
-        if (onAuthFailure) onAuthFailure();
-      }
-    } else {
+    const token = getAccessToken();
+    if (user && token) {
+      if (onAuthSuccess) onAuthSuccess(user, token);
+    } else if (!isSigningIn && !token) {
       cachedAccessToken = null;
       if (onAuthFailure) onAuthFailure();
     }
@@ -64,6 +67,15 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 
     cachedAccessToken = credential.accessToken;
     currentUserProfile = result.user;
+    try {
+      sessionStorage.setItem(SESSION_TOKEN_KEY, credential.accessToken);
+      if (result.user.email) {
+        sessionStorage.setItem(SESSION_USER_KEY, result.user.email);
+      }
+    } catch (e) {
+      console.warn('Could not save token to sessionStorage', e);
+    }
+
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error('Google Sign In error:', error);
@@ -74,15 +86,35 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const getAccessToken = (): string | null => {
-  return cachedAccessToken;
+  if (cachedAccessToken) return cachedAccessToken;
+  try {
+    const stored = sessionStorage.getItem(SESSION_TOKEN_KEY);
+    if (stored) {
+      cachedAccessToken = stored;
+      return stored;
+    }
+  } catch {}
+  return null;
 };
 
-export const getCurrentGoogleUser = (): User | null => {
-  return currentUserProfile || auth.currentUser;
+export const getCurrentGoogleUser = (): { email: string | null; displayName: string | null } | null => {
+  if (currentUserProfile) return { email: currentUserProfile.email, displayName: currentUserProfile.displayName };
+  if (auth.currentUser) return { email: auth.currentUser.email, displayName: auth.currentUser.displayName };
+  try {
+    const savedEmail = sessionStorage.getItem(SESSION_USER_KEY);
+    if (savedEmail) {
+      return { email: savedEmail, displayName: null };
+    }
+  } catch {}
+  return null;
 };
 
 export const googleSignOut = async (): Promise<void> => {
   await signOut(auth);
   cachedAccessToken = null;
   currentUserProfile = null;
+  try {
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    sessionStorage.removeItem(SESSION_USER_KEY);
+  } catch {}
 };

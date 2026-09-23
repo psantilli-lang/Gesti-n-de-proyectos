@@ -1,0 +1,50 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "type": "object",
+      "description": "SAP continuous improvement project with stages, schedules, and actions",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "area": { "type": "string" },
+        "sapModules": { "type": "array", "items": { "type": "string" } },
+        "title": { "type": "string" },
+        "currentSituation": { "type": "string" },
+        "improvementNeed": { "type": "string" },
+        "priority": { "type": "number" },
+        "state": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "code", "title", "state"]
+    },
+    "User": {
+      "title": "User",
+      "type": "object",
+      "description": "Application user profile and role",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "required": ["id", "name", "role"]
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Proyectos SAP de mejora continua"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Cuentas de usuario y perfiles con roles en el sistema"
+    },
+    "/test/{testId}": {
+      "schema": "object",
+      "description": "Colección para pruebas de conexión al servidor Firestore"
+    }
+  }
+}

@@ -95,6 +95,7 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
   });
 
   const [customResponsible, setCustomResponsible] = useState<string>('');
+  const [customResponsibleEmail, setCustomResponsibleEmail] = useState<string>('');
   const [initialComment, setInitialComment] = useState<string>('');
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -129,7 +130,12 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
       return;
     }
 
-    const finalResp = responsible === '__custom__' ? customResponsible.trim() : responsible;
+    const finalResp =
+      responsible === '__custom__'
+        ? customResponsibleEmail.trim()
+          ? `${customResponsible.trim()} (${customResponsibleEmail.trim()})`
+          : customResponsible.trim()
+        : responsible;
 
     const newAction: StageAction = {
       id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -273,13 +279,23 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
               </select>
 
               {responsible === '__custom__' && (
-                <input
-                  type="text"
-                  placeholder="Nombre del responsable..."
-                  value={customResponsible}
-                  onChange={(e) => setCustomResponsible(e.target.value)}
-                  className="mt-2 w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs"
-                />
+                <div className="mt-2 space-y-1.5">
+                  <input
+                    type="text"
+                    placeholder="Nombre del responsable..."
+                    value={customResponsible}
+                    onChange={(e) => setCustomResponsible(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-800"
+                  />
+                  <input
+                    type="email"
+                    placeholder="Email de notificación (ej: consultor@gmail.com, usuario@empresa.com)"
+                    value={customResponsibleEmail}
+                    onChange={(e) => setCustomResponsibleEmail(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-blue-700 font-medium"
+                    title="Cualquier dominio (@gmail, @outlook, @empresa, etc.)"
+                  />
+                </div>
               )}
             </div>
           </div>
