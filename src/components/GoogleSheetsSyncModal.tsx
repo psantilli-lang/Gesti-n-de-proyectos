@@ -118,9 +118,12 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
       return res.accessToken;
     } catch (err: any) {
       console.error('Sign in error:', err);
+      const isUnauthorizedDomain = err?.code === 'auth/unauthorized-domain';
       setSyncStatusMsg({
         type: 'error',
-        text: err?.message || 'No se pudo completar el inicio de sesión con Google.',
+        text: isUnauthorizedDomain
+          ? `El dominio "${window.location.hostname}" debe ser agregado en Firebase Console (Authentication > Settings > Authorized domains). Podés usar la importación por archivo CSV en esta misma pantalla mientras tanto.`
+          : err?.message || 'No se pudo completar el inicio de sesión con Google.',
       });
       return null;
     } finally {

@@ -9,7 +9,8 @@ import {
   AlertCircle, 
   Layers, 
   ShieldAlert,
-  Info
+  Info,
+  Key
 } from 'lucide-react';
 import { UserSession, SAP_MODULES_DATA } from '../types/project';
 import { storageService } from '../services/storageService';
@@ -25,12 +26,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState<boolean>(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    setSuccessMsg(null);
     setIsLoading(true);
 
     setTimeout(() => {
@@ -42,20 +45,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       } else {
         setErrorMsg(result.message || 'Credenciales incorrectas o usuario no registrado.');
       }
-    }, 250);
+    }, 200);
   };
 
   const handleGoogleLogin = async () => {
     try {
       setIsGoogleLoading(true);
       setErrorMsg(null);
+      setSuccessMsg(null);
       const firebaseUser = await signInWithGoogleFirebase();
       if (!firebaseUser.email) {
         await signOutFromFirebase();
         throw new Error('La cuenta de Google seleccionada no posee un correo electrónico asociado.');
       }
 
-      // Strict Whitelist Validation: only users already in Gestión de Usuarios are allowed
+      // Check if user is registered in system by PMO
       const authResult = storageService.authenticateGoogleUser({
         email: firebaseUser.email,
         displayName: firebaseUser.displayName,
@@ -63,13 +67,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       });
 
       if (!authResult.success || !authResult.user) {
-        // Sign out unauthorized account immediately
         await signOutFromFirebase();
-        setErrorMsg(authResult.message || `El correo ${firebaseUser.email} no está dado de alta en la Gestión de Usuarios.`);
+        setErrorMsg(
+          authResult.message ||
+          `El correo "${firebaseUser.email}" no está registrado en el sistema. Solicitá al PMO que cree tu usuario en Gestión de Usuarios.`
+        );
         return;
       }
 
-      // Synchronize updated lastLogin profile to Firestore
+      // Synchronize updated user profile to Firestore
       const allUsers = storageService.getUsers();
       const matched = allUsers.find((u) => u.id === authResult.user!.id);
       if (matched) {
@@ -80,11 +86,38 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     } catch (err: any) {
       console.error('Google Sign-In Error:', err);
       if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
-        setErrorMsg(err.message || 'Error al autenticarse con la cuenta de Google.');
+        if (err?.code === 'auth/unauthorized-domain') {
+          const currentDomain = window.location.hostname;
+          setErrorMsg(
+            `El dominio "${currentDomain}" no está habilitado en Firebase para Google OAuth. ` +
+            `Para habilitarlo en Vercel, agregalo en Firebase Console > Authentication > Settings > Authorized domains. ` +
+            `Mientras tanto, podés ingresar directamente con tu Usuario y Contraseña asignados por el PMO.`
+          );
+        } else if (err?.code === 'auth/popup-blocked') {
+          setErrorMsg(
+            'La ventana emergente de Google fue bloqueada por el navegador. Por favor permití los popups en la barra de direcciones e intentá nuevamente.'
+          );
+        } else {
+          setErrorMsg(err.message || 'Error al autenticarse con la cuenta de Google.');
+        }
       }
     } finally {
       setIsGoogleLoading(false);
     }
+  };
+
+  const autofillAdmin = () => {
+    setIdentifier('admin');
+    setPassword('admin');
+    setErrorMsg(null);
+    setSuccessMsg('Credenciales de Administrador cargadas (admin / admin). Hacé clic en "Ingresar al Sistema".');
+  };
+
+  const autofillPMO = () => {
+    setIdentifier('pmo');
+    setPassword('pmo');
+    setErrorMsg(null);
+    setSuccessMsg('Credenciales de PMO cargadas (pmo / pmo). Hacé clic en "Ingresar al Sistema".');
   };
 
   return (
@@ -139,9 +172,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-800/40 border border-slate-700/50 text-xs">
               <ShieldAlert className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
               <div>
-                <strong className="text-white block font-semibold">Política de Alta Previa</strong>
+                <strong className="text-white block font-semibold">Gestión Centralizada por PMO</strong>
                 <span className="text-slate-400">
-                  Solo pueden ingresar usuarios dados de alta previamente por el Administrador (PMO). Cuentas no registradas son bloqueadas automáticamente.
+                  Los usuarios son creados y administrados exclusivamente por el PMO dentro de la plataforma. No se permite autoregistro público.
                 </span>
               </div>
             </div>
@@ -149,9 +182,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-800/40 border border-slate-700/50 text-xs">
               <Layers className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
               <div>
-                <strong className="text-white block font-semibold">Acceso Multi-dominio</strong>
+                <strong className="text-white block font-semibold">Acceso Seguro Multi-canal</strong>
                 <span className="text-slate-400">
-                  Personal interno y consultores externos pueden acceder si su dirección fue precargada en la nómina.
+                  Podés acceder con tu usuario y contraseña asignados o con tu cuenta de Google corporativa previamente registrada.
                 </span>
               </div>
             </div>
@@ -168,7 +201,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   Iniciar Sesión
                 </span>
                 <span className="text-xs text-slate-500 hidden sm:inline">
-                  • Acceso exclusivo para usuarios autorizados
+                  • Acceso exclusivo para personal autorizado
                 </span>
               </div>
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -178,7 +211,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             </div>
 
             {/* Form Body */}
-            <div className="p-6 sm:p-8 space-y-5">
+            <div className="p-6 sm:p-8 space-y-4">
               {errorMsg && (
                 <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5 animate-in fade-in">
                   <AlertCircle className="w-4 h-4 text-rose-600 mt-0.5 shrink-0" />
@@ -186,6 +219,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     <strong className="block font-semibold">Acceso denegado</strong>
                     <span>{errorMsg}</span>
                   </div>
+                </div>
+              )}
+
+              {successMsg && (
+                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2 animate-in fade-in">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{successMsg}</span>
                 </div>
               )}
 
@@ -216,18 +256,45 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                     />
                   </svg>
                   <span>
-                    {isGoogleLoading ? 'Verificando autorización en nómina...' : 'Continuar con Google'}
+                    {isGoogleLoading ? 'Verificando con Google...' : 'Continuar con Google'}
                   </span>
                 </button>
                 <div className="text-[11px] text-center text-slate-500">
-                  Válido para cuentas preautorizadas (<strong className="text-slate-700">@crucianelli.com</strong>, <strong className="text-slate-700">@gmail.com</strong> o consultores externos)
+                  Válido para cuentas dadas de alta por el PMO (<strong className="text-slate-700">@crucianelli.com</strong> o consultores)
                 </div>
 
-                <div className="relative flex items-center justify-center my-2">
+                <div className="relative flex items-center justify-center my-3">
                   <div className="border-t border-slate-200 w-full" />
                   <span className="bg-white px-3 text-[11px] font-medium text-slate-400 uppercase tracking-wider absolute">
                     O con usuario y contraseña
                   </span>
+                </div>
+              </div>
+
+              {/* QUICK ADMIN AUTOFILL HELPER */}
+              <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-200 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 text-blue-900">
+                  <Key className="w-4 h-4 text-blue-600 shrink-0" />
+                  <div>
+                    <span className="font-semibold block text-slate-800">¿Acceso inicial como Administrador?</span>
+                    <span className="text-[11px] text-slate-600">Usuario: <strong>admin</strong> | Clave: <strong>admin</strong></span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={autofillAdmin}
+                    className="px-2.5 py-1 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-2xs transition-all cursor-pointer"
+                  >
+                    admin
+                  </button>
+                  <button
+                    type="button"
+                    onClick={autofillPMO}
+                    className="px-2.5 py-1 text-[11px] font-bold bg-slate-700 hover:bg-slate-800 text-white rounded-lg shadow-2xs transition-all cursor-pointer"
+                  >
+                    pmo
+                  </button>
                 </div>
               </div>
 
@@ -244,7 +311,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                       required
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
-                      placeholder="Ingresá tu usuario o correo electrónico"
+                      placeholder="admin, pmo o tu usuario/correo"
                       className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     />
                   </div>
@@ -286,7 +353,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {isLoading ? (
-                    <span>Verificando nómina y credenciales...</span>
+                    <span>Verificando credenciales...</span>
                   ) : (
                     <>
                       <span>Ingresar al Sistema</span>
@@ -300,7 +367,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-slate-600 text-xs flex items-start gap-2.5">
                 <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
                 <span className="leading-relaxed">
-                  ¿No tenés acceso? Solo pueden ingresar las personas dadas de alta por el equipo de <strong>PMO SAP</strong> en el panel de Gestión de Usuarios. Solicitá tu alta a tu referente o al Administrador.
+                  ¿No tenés acceso? Solo pueden ingresar las personas dadas de alta por el equipo de <strong>PMO SAP</strong> desde el módulo de Gestión de Usuarios. Solicitá tu alta a tu referente o al Administrador.
                 </span>
               </div>
             </div>

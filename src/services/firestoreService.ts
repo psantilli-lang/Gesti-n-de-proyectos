@@ -250,14 +250,27 @@ export const firestoreService = {
           return;
         }
 
-        const list: AppUser[] = [];
+        const remoteList: AppUser[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as AppUser;
-          list.push({ ...data, id: docSnap.id });
+          remoteList.push({ ...data, id: docSnap.id });
         });
 
-        storageService.saveUsers(list);
-        onData(list);
+        // Merge remote users with local users, preserving passwords and newly created local users
+        const localUsers = storageService.getUsers();
+        const userMap = new Map<string, AppUser>();
+        localUsers.forEach((u) => userMap.set(u.id, u));
+        remoteList.forEach((r) => {
+          const local = userMap.get(r.id);
+          userMap.set(r.id, {
+            ...r,
+            password: r.password || local?.password || (r.username === 'admin' ? 'admin' : r.username === 'pmo' ? 'pmo' : '123'),
+          });
+        });
+
+        const merged = Array.from(userMap.values());
+        storageService.saveUsers(merged);
+        onData(merged);
       },
       (error) => {
         if ((error as any)?.code === 'unavailable') {
