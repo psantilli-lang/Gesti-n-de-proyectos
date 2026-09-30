@@ -17,6 +17,7 @@ import {
   ExternalLink,
   Settings,
   Mail,
+  Trash2,
 } from 'lucide-react';
 import { UserSession, SAP_MODULES_DATA } from '../types/project';
 import { isPMO, getRoleDisplayName } from '../utils/helpers';
@@ -329,46 +330,32 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Google Sheets Direct Open & Sync Controls */}
             {onOpenGoogleSheetsSync && (
               <div className="flex items-center rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100/80 transition-colors shadow-2xs overflow-hidden">
-                {sheetsSyncInfo?.spreadsheetUrl ? (
+                <button
+                  type="button"
+                  onClick={onOpenGoogleSheetsSync}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-emerald-900 text-xs font-bold transition-all cursor-pointer hover:text-emerald-950 active:scale-[0.98] whitespace-nowrap"
+                  title="Abrir panel de integración, carga e importación de Google Sheets"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="inline font-bold">Google Sheets</span>
+                  {sheetsSyncInfo?.isConnected ? (
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Conectado" />
+                  ) : (
+                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Pendiente de conectar" />
+                  )}
+                </button>
+
+                {sheetsSyncInfo?.spreadsheetUrl && (
                   <a
                     href={sheetsSyncInfo.spreadsheetUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-emerald-900 text-xs font-bold transition-all cursor-pointer hover:text-emerald-950 active:scale-[0.98] whitespace-nowrap"
-                    title="Abrir directamente el archivo en Google Sheets"
+                    className="px-2 py-1.5 border-l border-emerald-200/80 hover:bg-emerald-200/60 text-emerald-700 transition-colors cursor-pointer"
+                    title="Abrir planilla de Google Sheets en pestaña nueva"
                   >
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span className="inline font-bold">Google Sheets</span>
                     <ExternalLink className="w-3.5 h-3.5 text-emerald-600 opacity-80 shrink-0" />
                   </a>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={onOpenGoogleSheetsSync}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-emerald-900 text-xs font-bold transition-all cursor-pointer active:scale-[0.98] whitespace-nowrap"
-                    title="Conectar y abrir Google Sheets"
-                  >
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span className="inline font-bold">Google Sheets</span>
-                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Pendiente de conectar" />
-                  </button>
                 )}
-
-                {/* Settings / Sync Modal Trigger */}
-                <button
-                  type="button"
-                  onClick={onOpenGoogleSheetsSync}
-                  className="px-2 py-1.5 border-l border-emerald-200/80 hover:bg-emerald-200/60 text-emerald-700 transition-colors cursor-pointer"
-                  title="Configuración y estado de sincronización"
-                >
-                  {sheetsSyncInfo?.isSyncing ? (
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
-                  ) : sheetsSyncInfo?.isConnected ? (
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" title="Sincronización activa" />
-                  ) : (
-                    <Settings className="w-3.5 h-3.5 text-emerald-600" />
-                  )}
-                </button>
               </div>
             )}
 
@@ -381,17 +368,13 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Nuevo Proyecto</span>
             </button>
 
-            {/* Reset mock data button */}
+            {/* Delete old test projects button */}
             <button
-              onClick={() => {
-                if (window.confirm('¿Desea restablecer los proyectos a los datos iniciales de prueba?')) {
-                  onResetData();
-                }
-              }}
-              title="Restablecer datos demo"
-              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              onClick={onResetData}
+              title="Eliminar proyectos viejos de prueba"
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
             >
-              <RotateCcw className="w-4 h-4" />
+              <Trash2 className="w-4 h-4" />
             </button>
           </div>
         </div>

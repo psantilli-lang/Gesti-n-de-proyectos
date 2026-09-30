@@ -8,37 +8,25 @@ import {
   ArrowRight, 
   AlertCircle, 
   Layers, 
-  UserPlus, 
-  CheckCircle2, 
-  Sparkles
+  ShieldAlert,
+  Info
 } from 'lucide-react';
-import { UserSession, AppUser, SAP_MODULES_DATA, UserRole } from '../types/project';
+import { UserSession, SAP_MODULES_DATA } from '../types/project';
 import { storageService } from '../services/storageService';
-import { isPMO } from '../utils/helpers';
+import { signInWithGoogleFirebase, signOutFromFirebase } from '../services/firebase';
+import { firestoreService } from '../services/firestoreService';
 
 interface LoginViewProps {
   onLoginSuccess: (user: UserSession) => void;
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
-  const [isRegisterMode, setIsRegisterMode] = useState<boolean>(false);
-  const [identifier, setIdentifier] = useState<string>('admin');
-  const [password, setPassword] = useState<string>('admin');
+  const [identifier, setIdentifier] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-
-  // Registration form state
-  const [regName, setRegName] = useState<string>('');
-  const [regUsername, setRegUsername] = useState<string>('');
-  const [regEmail, setRegEmail] = useState<string>('');
-  const [regPassword, setRegPassword] = useState<string>('');
-  const [regConfirmPassword, setRegConfirmPassword] = useState<string>('');
-  const [regRole, setRegRole] = useState<UserRole>('user');
-  const [regSuccessMsg, setRegSuccessMsg] = useState<string | null>(null);
-
-  // Available users for quick access
-  const allUsers = storageService.getUsers();
+  const [isGoogleLoading, setIsGoogleLoading] = useState<boolean>(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,49 +40,50 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       if (result.success && result.user) {
         onLoginSuccess(result.user);
       } else {
-        setErrorMsg(result.message || 'Credenciales incorrectas.');
+        setErrorMsg(result.message || 'Credenciales incorrectas o usuario no registrado.');
       }
     }, 250);
   };
 
-  const handleQuickSelect = (user: AppUser) => {
-    setIdentifier(user.username || user.email);
-    setPassword(user.password || 'sap2026');
-    setErrorMsg(null);
-  };
+  const handleGoogleLogin = async () => {
+    try {
+      setIsGoogleLoading(true);
+      setErrorMsg(null);
+      const firebaseUser = await signInWithGoogleFirebase();
+      if (!firebaseUser.email) {
+        await signOutFromFirebase();
+        throw new Error('La cuenta de Google seleccionada no posee un correo electrónico asociado.');
+      }
 
-  const handleRegister = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
+      // Strict Whitelist Validation: only users already in Gestión de Usuarios are allowed
+      const authResult = storageService.authenticateGoogleUser({
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        photoURL: firebaseUser.photoURL,
+      });
 
-    if (regPassword !== regConfirmPassword) {
-      setErrorMsg('Las contraseñas no coinciden.');
-      return;
-    }
+      if (!authResult.success || !authResult.user) {
+        // Sign out unauthorized account immediately
+        await signOutFromFirebase();
+        setErrorMsg(authResult.message || `El correo ${firebaseUser.email} no está dado de alta en la Gestión de Usuarios.`);
+        return;
+      }
 
-    if (regPassword.length < 3) {
-      setErrorMsg('La contraseña debe tener al menos 3 caracteres.');
-      return;
-    }
+      // Synchronize updated lastLogin profile to Firestore
+      const allUsers = storageService.getUsers();
+      const matched = allUsers.find((u) => u.id === authResult.user!.id);
+      if (matched) {
+        firestoreService.saveUser(matched).catch((e) => console.warn('Firestore user sync warning:', e));
+      }
 
-    const res = storageService.addUser({
-      name: regName,
-      username: regUsername,
-      email: regEmail,
-      password: regPassword,
-      role: regRole,
-    });
-
-    if (res.success && res.user) {
-      setRegSuccessMsg(`¡Usuario "${res.user.name}" creado con éxito! Iniciando sesión...`);
-      setTimeout(() => {
-        const loginRes = storageService.authenticate(res.user!.username, regPassword);
-        if (loginRes.success && loginRes.user) {
-          onLoginSuccess(loginRes.user);
-        }
-      }, 1000);
-    } else {
-      setErrorMsg(res.message || 'Error al registrar usuario.');
+      onLoginSuccess(authResult.user);
+    } catch (err: any) {
+      console.error('Google Sign-In Error:', err);
+      if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
+        setErrorMsg(err.message || 'Error al autenticarse con la cuenta de Google.');
+      }
+    } finally {
+      setIsGoogleLoading(false);
     }
   };
 
@@ -131,11 +120,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
       {/* Center Auth Card */}
       <div className="max-w-4xl w-full mx-auto my-6 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-        {/* Left Side: Information & Value */}
+        {/* Left Side: Information & Access Policy */}
         <div className="lg:col-span-5 space-y-6 text-left hidden lg:block">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-900/60 border border-blue-700/50 text-blue-300 text-xs font-medium">
             <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-            <span>Acceso Seguro con Contraseña</span>
+            <span>Acceso con Nómina Autorizada</span>
           </div>
 
           <h2 className="text-3xl font-extrabold text-white leading-tight tracking-tight">
@@ -143,16 +132,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           </h2>
 
           <p className="text-sm text-slate-300 leading-relaxed">
-            Ingresá con tu cuenta corporativa para gestionar las iniciativas de mejora, actualizar el cronograma plan vs. real y completar tus acciones pendientes.
+            Sistema restringido exclusivamente a miembros y colaboradores registrados en la nómina oficial del PMO.
           </p>
 
           <div className="space-y-3 pt-2">
             <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-800/40 border border-slate-700/50 text-xs">
-              <ShieldCheck className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
+              <ShieldAlert className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
               <div>
-                <strong className="text-white block font-semibold">Roles PMO y Usuario</strong>
+                <strong className="text-white block font-semibold">Política de Alta Previa</strong>
                 <span className="text-slate-400">
-                  PMO con edición del 100%, priorización y reportería exclusivas. Usuarios con gestión de asignaciones, cambio de estado y control de proyectos propios.
+                  Solo pueden ingresar usuarios dados de alta previamente por el Administrador (PMO). Cuentas no registradas son bloqueadas automáticamente.
                 </span>
               </div>
             </div>
@@ -160,76 +149,90 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-800/40 border border-slate-700/50 text-xs">
               <Layers className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
               <div>
-                <strong className="text-white block font-semibold">Barrida Semanal y Priorización</strong>
+                <strong className="text-white block font-semibold">Acceso Multi-dominio</strong>
                 <span className="text-slate-400">
-                  Visualización consolidada de avances, estado de etapas y tareas por responsable.
+                  Personal interno y consultores externos pueden acceder si su dirección fue precargada en la nómina.
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Side: Auth Form */}
-        <div className="lg:col-span-7 bg-white text-slate-800 rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-          {/* Form Header */}
-          <div className="p-6 sm:p-8 bg-slate-50/80 border-b border-slate-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-lg bg-blue-600/10 text-blue-700 flex items-center justify-center">
-                  <Lock className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">
-                    {isRegisterMode ? 'Crear Nuevo Usuario' : 'Ingreso al Sistema'}
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    {isRegisterMode
-                      ? 'Completá los datos para dar de alta una nueva cuenta con contraseña'
-                      : 'Ingresá tu usuario o correo corporativo y contraseña'}
-                  </p>
-                </div>
+        {/* Right Side: Auth Form Container */}
+        <div className="lg:col-span-7">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/80 overflow-hidden text-slate-900">
+            {/* Header */}
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-slate-900">
+                  Iniciar Sesión
+                </span>
+                <span className="text-xs text-slate-500 hidden sm:inline">
+                  • Acceso exclusivo para usuarios autorizados
+                </span>
               </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsRegisterMode(!isRegisterMode);
-                  setErrorMsg(null);
-                  setRegSuccessMsg(null);
-                }}
-                className="text-xs font-semibold text-blue-700 hover:text-blue-800 hover:underline inline-flex items-center gap-1 cursor-pointer"
-              >
-                {isRegisterMode ? (
-                  <>Volver a Iniciar Sesión</>
-                ) : (
-                  <>
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>Crear cuenta</span>
-                  </>
-                )}
-              </button>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                <ShieldCheck className="w-3 h-3" />
+                Seguro
+              </span>
             </div>
-          </div>
 
-          {/* Form Body */}
-          <div className="p-6 sm:p-8 space-y-5">
-            {errorMsg && (
-              <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5 animate-in fade-in">
-                <AlertCircle className="w-4 h-4 text-rose-600 mt-0.5 shrink-0" />
-                <span>{errorMsg}</span>
+            {/* Form Body */}
+            <div className="p-6 sm:p-8 space-y-5">
+              {errorMsg && (
+                <div className="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 text-rose-600 mt-0.5 shrink-0" />
+                  <div className="space-y-1">
+                    <strong className="block font-semibold">Acceso denegado</strong>
+                    <span>{errorMsg}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* GOOGLE SIGN-IN BUTTON */}
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={handleGoogleLogin}
+                  disabled={isGoogleLoading || isLoading}
+                  className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl border border-slate-300 shadow-xs hover:border-slate-400 transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                    />
+                  </svg>
+                  <span>
+                    {isGoogleLoading ? 'Verificando autorización en nómina...' : 'Continuar con Google'}
+                  </span>
+                </button>
+                <div className="text-[11px] text-center text-slate-500">
+                  Válido para cuentas preautorizadas (<strong className="text-slate-700">@crucianelli.com</strong>, <strong className="text-slate-700">@gmail.com</strong> o consultores externos)
+                </div>
+
+                <div className="relative flex items-center justify-center my-2">
+                  <div className="border-t border-slate-200 w-full" />
+                  <span className="bg-white px-3 text-[11px] font-medium text-slate-400 uppercase tracking-wider absolute">
+                    O con usuario y contraseña
+                  </span>
+                </div>
               </div>
-            )}
 
-            {regSuccessMsg && (
-              <div className="p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2.5 animate-in fade-in">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-                <span>{regSuccessMsg}</span>
-              </div>
-            )}
-
-            {!isRegisterMode ? (
-              /* LOGIN FORM */
-              <form onSubmit={handleLogin} className="space-y-4">
+              {/* LOGIN FORM */}
+              <form onSubmit={handleLogin} className="space-y-4 pt-1">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
                     Usuario o Correo Electrónico
@@ -241,7 +244,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                       required
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
-                      placeholder="Ej: admin, crossi o correo@empresa.com"
+                      placeholder="Ingresá tu usuario o correo electrónico"
                       className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     />
                   </div>
@@ -279,11 +282,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || isGoogleLoading}
                   className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {isLoading ? (
-                    <span>Verificando credenciales...</span>
+                    <span>Verificando nómina y credenciales...</span>
                   ) : (
                     <>
                       <span>Ingresar al Sistema</span>
@@ -292,184 +295,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   )}
                 </button>
               </form>
-            ) : (
-              /* REGISTRATION FORM */
-              <form onSubmit={handleRegister} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Nombre y Apellido *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={regName}
-                      onChange={(e) => setRegName(e.target.value)}
-                      placeholder="Ej: Lic. Marcos Benítez"
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Nombre de Usuario *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={regUsername}
-                      onChange={(e) => setRegUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
-                      placeholder="Ej: mbenitez"
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Correo Electrónico *
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="m.benitez@empresa.com"
-                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Rol en el Sistema *
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label
-                      className={`flex flex-col gap-0.5 p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${
-                        !isPMO({ role: regRole } as UserSession)
-                          ? 'bg-blue-50 border-blue-300 text-blue-900 ring-1 ring-blue-300'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 font-bold">
-                        <input
-                          type="radio"
-                          name="regRole"
-                          checked={!isPMO({ role: regRole } as UserSession)}
-                          onChange={() => setRegRole('user')}
-                          className="text-blue-600"
-                        />
-                        <span>Usuario</span>
-                      </div>
-                      <span className="text-[10px] text-slate-500 font-normal leading-tight">
-                        Completa tareas, cambia estado (excepto Cancelado) y edita proyectos propios
-                      </span>
-                    </label>
-
-                    <label
-                      className={`flex flex-col gap-0.5 p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${
-                        isPMO({ role: regRole } as UserSession)
-                          ? 'bg-indigo-50 border-indigo-300 text-indigo-900 ring-1 ring-indigo-300'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 font-bold">
-                        <input
-                          type="radio"
-                          name="regRole"
-                          checked={isPMO({ role: regRole } as UserSession)}
-                          onChange={() => setRegRole('pmo')}
-                          className="text-indigo-600"
-                        />
-                        <span>PMO</span>
-                      </div>
-                      <span className="text-[10px] text-slate-500 font-normal leading-tight">
-                        Acceso y edición 100%, priorización y reportería exclusivas
-                      </span>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Contraseña *
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      minLength={3}
-                      value={regPassword}
-                      onChange={(e) => setRegPassword(e.target.value)}
-                      placeholder="Mínimo 3 caracteres"
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Confirmar Contraseña *
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      value={regConfirmPassword}
-                      onChange={(e) => setRegConfirmPassword(e.target.value)}
-                      placeholder="Repetí la contraseña"
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span>Crear Usuario con Contraseña</span>
-                </button>
-              </form>
-            )}
-
-            {/* Quick Demo Accounts Drawer */}
-            <div className="pt-4 border-t border-slate-200">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                  Cuentas Demo para Acceso Rápido:
+              {/* Informative notice for non-registered users */}
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-slate-600 text-xs flex items-start gap-2.5">
+                <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                <span className="leading-relaxed">
+                  ¿No tenés acceso? Solo pueden ingresar las personas dadas de alta por el equipo de <strong>PMO SAP</strong> en el panel de Gestión de Usuarios. Solicitá tu alta a tu referente o al Administrador.
                 </span>
-                <span className="text-[10px] text-slate-400">
-                  (Haz clic para rellenar usuario y contraseña)
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {allUsers.slice(0, 4).map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => handleQuickSelect(u)}
-                    className="p-2 text-left rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors flex items-center justify-between text-xs group cursor-pointer"
-                  >
-                    <div className="truncate mr-1">
-                      <strong className="block text-slate-800 text-[11px] truncate group-hover:text-blue-700">
-                        {u.name}
-                      </strong>
-                      <span className="text-[10px] text-slate-500 font-mono">
-                        Usuario: {u.username} • Clave: {u.password}
-                      </span>
-                    </div>
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 uppercase tracking-wider ${
-                        isPMO(u)
-                          ? 'bg-indigo-100 text-indigo-800'
-                          : 'bg-blue-100 text-blue-800'
-                      }`}
-                    >
-                      {isPMO(u) ? 'PMO' : 'Usuario'}
-                    </span>
-                  </button>
-                ))}
               </div>
             </div>
           </div>
@@ -478,7 +310,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
       {/* Footer info */}
       <div className="max-w-6xl w-full mx-auto text-center py-2 text-xs text-slate-400">
-        Gestión de Proyectos SAP • Entorno Corporativo Crucianelli • Autenticación de Usuarios
+        Gestión de Proyectos SAP • Acceso Estricto para Personal y Consultores Autorizados
       </div>
     </div>
   );

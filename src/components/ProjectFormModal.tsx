@@ -288,7 +288,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
     }
 
     if ((state === '8- Cancelado' || state === '08- Cancelado') && !canCancel) {
-      alert('Permiso denegado: El cambio de estado a "8- Cancelado" es exclusivo del rol PMO.');
+      alert('Permiso denegado: El cambio de estado a "08- Cancelado" es exclusivo del rol PMO.');
       return;
     }
 
@@ -496,7 +496,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                 className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-blue-900 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
               >
                 {ALL_PROJECT_STATES.map((st) => {
-                  const isCancel = st === '8- Cancelado';
+                  const isCancel = st === '8- Cancelado' || st === '08- Cancelado';
                   const disabledOpt = isCancel && !canCancel;
                   return (
                     <option key={st} value={st} disabled={disabledOpt}>

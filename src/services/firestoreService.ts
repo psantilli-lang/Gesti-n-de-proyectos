@@ -69,10 +69,16 @@ export const firestoreService = {
       projectsCol,
       (snapshot) => {
         if (snapshot.empty) {
-          // If empty in Firestore, seed initial projects
-          this.seedInitialProjectsIfEmpty()
-            .then(() => {})
-            .catch((e) => console.warn('Seeding initial projects in Firestore failed:', e));
+          // Never clear localStorage when Firestore is empty; preserve local projects and back them up to Firestore
+          const local = storageService.getProjects();
+          if (local && local.length > 0) {
+            onData(local);
+            firestoreService.replaceAllProjects(local).catch((syncErr) => {
+              console.warn('Syncing local projects to Firestore notice:', syncErr);
+            });
+            return;
+          }
+          onData([]);
           return;
         }
 
@@ -84,10 +90,10 @@ export const firestoreService = {
 
         // Sort projects by priority or code
         list.sort((a, b) => {
-          if (a.priority !== undefined && b.priority !== undefined) {
+          if (a.priority !== undefined && b.priority !== undefined && a.priority !== b.priority) {
             return a.priority - b.priority;
           }
-          return a.code.localeCompare(b.code);
+          return a.code.localeCompare(b.code, undefined, { numeric: true });
         });
 
         // Save to local storage as local cache
@@ -95,6 +101,10 @@ export const firestoreService = {
         onData(list);
       },
       (error) => {
+        if ((error as any)?.code === 'unavailable') {
+          // Client is in offline mode or reconnecting; local cache continues to serve data
+          return;
+        }
         console.error('Firestore projects onSnapshot error:', error);
         if (onError) onError(error);
         try {
@@ -109,26 +119,50 @@ export const firestoreService = {
   },
 
   /**
-   * Seed default projects into Firestore if empty
+   * No-op: Test projects removed. Official projects are loaded from Google Sheets / CSV.
    */
   async seedInitialProjectsIfEmpty(): Promise<void> {
+    // Intentionally empty to prevent re-seeding test data
+  },
+
+  /**
+   * Completely wipe all projects from Firestore and local storage.
+   */
+  async deleteAllProjects(): Promise<void> {
     try {
       await ensureFirebaseAuth();
       const snap = await getDocs(collection(db, 'projects'));
-      if (snap.empty) {
-        // Read from local storage or INITIAL_PROJECTS
-        const currentLocal = storageService.getProjects();
-        const toSeed = currentLocal.length > 0 ? currentLocal : INITIAL_PROJECTS;
-
-        const batch = writeBatch(db);
-        toSeed.forEach((p) => {
-          const docRef = doc(db, 'projects', p.id);
-          batch.set(docRef, p);
-        });
-        await batch.commit();
-      }
+      const batch = writeBatch(db);
+      snap.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+      await batch.commit();
+      storageService.clearAllProjects();
     } catch (error) {
-      console.warn('Error seeding initial projects to Firestore:', error);
+      handleFirestoreError(error, OperationType.DELETE, 'projects');
+    }
+  },
+
+  /**
+   * Replaces all existing projects in Firestore with a new set of projects.
+   * Deletes all previous/old projects first, ensuring clean state.
+   */
+  async replaceAllProjects(newProjects: SAPProject[]): Promise<void> {
+    try {
+      await ensureFirebaseAuth();
+      const snap = await getDocs(collection(db, 'projects'));
+      const batch = writeBatch(db);
+      snap.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+      newProjects.forEach((p) => {
+        const docRef = doc(db, 'projects', p.id);
+        batch.set(docRef, p);
+      });
+      await batch.commit();
+      storageService.saveProjects(newProjects);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'projects');
     }
   },
 
@@ -226,6 +260,10 @@ export const firestoreService = {
         onData(list);
       },
       (error) => {
+        if ((error as any)?.code === 'unavailable') {
+          // Client is in offline mode or reconnecting; local cache continues to serve data
+          return;
+        }
         console.error('Firestore users onSnapshot error:', error);
         if (onError) onError(error);
         try {

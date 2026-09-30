@@ -164,7 +164,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
     if (newState === '8- Cancelado' || newState === '08- Cancelado') {
       if (!canCancel) {
         alert(
-          'Permiso denegado: El cambio de estado a "8- Cancelado" es una actividad exclusiva del rol PMO.'
+          'Permiso denegado: El cambio de estado a "08- Cancelado" es una actividad exclusiva del rol PMO.'
         );
         return;
       }
@@ -346,7 +346,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                   title="Cambiar estado del proyecto"
                 >
                   {ALL_PROJECT_STATES.map((st) => {
-                    const isCancel = st === '8- Cancelado';
+                    const isCancel = st === '8- Cancelado' || st === '08- Cancelado';
                     const disabledOpt = isCancel && !canCancel;
                     return (
                       <option key={st} value={st} disabled={disabledOpt}>

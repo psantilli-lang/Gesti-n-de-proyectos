@@ -30,10 +30,14 @@ const SESSION_USER_KEY = 'google_workspace_user_email';
 // Cache the access token in memory and sessionStorage
 let cachedAccessToken: string | null = (() => {
   try {
-    return sessionStorage.getItem(SESSION_TOKEN_KEY);
+    const stored = sessionStorage.getItem(SESSION_TOKEN_KEY);
+    if (stored && stored.length > 20 && stored !== 'undefined' && stored !== 'null') {
+      return stored;
+    }
   } catch {
     return null;
   }
+  return null;
 })();
 
 let currentUserProfile: User | null = null;
@@ -62,7 +66,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
-      throw new Error('No se pudo obtener el token de acceso de Google');
+      throw new Error('No se pudo obtener el token de acceso OAuth de Google.');
     }
 
     cachedAccessToken = credential.accessToken;
@@ -85,16 +89,45 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
   }
 };
 
+export const clearStoredToken = (): void => {
+  cachedAccessToken = null;
+  try {
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    sessionStorage.removeItem(SESSION_USER_KEY);
+  } catch {}
+};
+
 export const getAccessToken = (): string | null => {
-  if (cachedAccessToken) return cachedAccessToken;
+  if (cachedAccessToken && cachedAccessToken.length > 20 && cachedAccessToken !== 'undefined' && cachedAccessToken !== 'null') {
+    return cachedAccessToken;
+  }
   try {
     const stored = sessionStorage.getItem(SESSION_TOKEN_KEY);
-    if (stored) {
+    if (stored && stored.length > 20 && stored !== 'undefined' && stored !== 'null') {
       cachedAccessToken = stored;
       return stored;
     }
   } catch {}
   return null;
+};
+
+/**
+ * Validates with Google tokeninfo endpoint if the token is still active and has time remaining.
+ */
+export const validateGoogleToken = async (token: string | null): Promise<boolean> => {
+  if (!token || token.length < 20 || token === 'undefined' || token === 'null') {
+    return false;
+  }
+  try {
+    const res = await fetch(`https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${encodeURIComponent(token)}`);
+    if (res.ok) {
+      const data = await res.json();
+      return typeof data.expires_in === 'number' && data.expires_in > 30;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 };
 
 export const getCurrentGoogleUser = (): { email: string | null; displayName: string | null } | null => {
@@ -111,10 +144,6 @@ export const getCurrentGoogleUser = (): { email: string | null; displayName: str
 
 export const googleSignOut = async (): Promise<void> => {
   await signOut(auth);
-  cachedAccessToken = null;
+  clearStoredToken();
   currentUserProfile = null;
-  try {
-    sessionStorage.removeItem(SESSION_TOKEN_KEY);
-    sessionStorage.removeItem(SESSION_USER_KEY);
-  } catch {}
 };

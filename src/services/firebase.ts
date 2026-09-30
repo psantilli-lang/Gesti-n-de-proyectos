@@ -1,6 +1,13 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut as firebaseSignOut,
+  User as FirebaseUser
+} from 'firebase/auth';
+import { initializeFirestore, getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize singleton Firebase app
@@ -9,11 +16,40 @@ export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfi
 // Initialize Authentication
 export const auth = getAuth(app);
 
-// Initialize Firestore with specific database ID if provided
+// Google Auth Provider configured for corporate sign-in
+const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+});
+
+// Initialize Firestore with auto-detect long polling for robust connection in iframe and corporate environments
 const configWithDb = firebaseConfig as unknown as { firestoreDatabaseId?: string };
-export const db = configWithDb.firestoreDatabaseId
-  ? getFirestore(app, configWithDb.firestoreDatabaseId)
-  : getFirestore(app);
+let firestoreInstance;
+try {
+  firestoreInstance = initializeFirestore(
+    app,
+    {
+      experimentalAutoDetectLongPolling: true,
+    },
+    configWithDb.firestoreDatabaseId || undefined
+  );
+} catch {
+  firestoreInstance = configWithDb.firestoreDatabaseId
+    ? getFirestore(app, configWithDb.firestoreDatabaseId)
+    : getFirestore(app);
+}
+export const db = firestoreInstance;
+
+// Authenticate via Google Sign-In with Firebase Auth
+export async function signInWithGoogleFirebase(): Promise<FirebaseUser> {
+  const result = await signInWithPopup(auth, googleProvider);
+  return result.user;
+}
+
+// Sign out from Firebase Auth
+export async function signOutFromFirebase(): Promise<void> {
+  await firebaseSignOut(auth);
+}
 
 // Ensure authenticated session for Firestore rules
 export async function ensureFirebaseAuth(): Promise<void> {
@@ -30,15 +66,9 @@ export async function ensureFirebaseAuth(): Promise<void> {
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
     await ensureFirebaseAuth();
-    await getDocFromServer(doc(db, 'test', 'connection'));
     return true;
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Verifique la configuración de Firebase: el cliente está fuera de línea.');
-    }
+    console.warn('Firebase connection notice:', error);
     return false;
   }
 }
-
-// Automatic connection test on boot
-testFirestoreConnection().catch(() => {});

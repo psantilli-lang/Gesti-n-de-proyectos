@@ -57,6 +57,20 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
   const [selectedState, setSelectedState] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
+  const [editingTitleProjectId, setEditingTitleProjectId] = useState<string | null>(null);
+  const [tempTitle, setTempTitle] = useState<string>('');
+
+  const handleSaveTitle = (project: SAPProject) => {
+    const trimmed = tempTitle.trim();
+    if (trimmed && trimmed !== project.title) {
+      onUpdateProject({
+        ...project,
+        title: trimmed,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    setEditingTitleProjectId(null);
+  };
 
   const areas = useMemo(() => {
     return Array.from(new Set(projects.map((p) => p.area))).sort();
@@ -66,7 +80,12 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
     return projects.filter((p) => {
       if (selectedArea !== 'all' && p.area !== selectedArea) return false;
       if (selectedModule !== 'all' && !p.sapModules.includes(selectedModule as SAPModule)) return false;
-      if (selectedState !== 'all' && p.state !== selectedState) return false;
+      if (selectedState !== 'all') {
+        const pCode = p.state.split('-')[0].trim();
+        const sCode = selectedState.split('-')[0].trim();
+        const matches = p.state === selectedState || (pCode && pCode === sCode);
+        if (!matches) return false;
+      }
 
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
@@ -85,10 +104,10 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
   }, [projects, selectedArea, selectedModule, selectedState, searchTerm]);
 
   const handleStateChange = (project: SAPProject, newState: ProjectState) => {
-    if (newState === '8- Cancelado') {
+    if (newState === '8- Cancelado' || newState === '08- Cancelado') {
       if (!canUserCancelProject(currentUser, project)) {
         alert(
-          `Permiso denegado: El cambio de estado a "8- Cancelado" es exclusivo del rol PMO.`
+          `Permiso denegado: El cambio de estado a "08- Cancelado" es exclusivo del rol PMO.`
         );
         return;
       }
@@ -202,12 +221,19 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
               onChange={(e) => setSelectedState(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
-              <option value="all">Todos los Estados ({ALL_PROJECT_STATES.length})</option>
-              {ALL_PROJECT_STATES.map((st) => (
-                <option key={st} value={st}>
-                  {st}
-                </option>
-              ))}
+              <option value="all">Todos los Estados ({projects.length})</option>
+              {ALL_PROJECT_STATES.map((st) => {
+                const count = projects.filter((p) => {
+                  const pCode = p.state.split('-')[0].trim();
+                  const sCode = st.split('-')[0].trim();
+                  return p.state === st || (pCode && pCode === sCode);
+                }).length;
+                return (
+                  <option key={st} value={st}>
+                    {st} ({count})
+                  </option>
+                );
+              })}
             </select>
           </div>
         </div>
@@ -235,7 +261,7 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
                   {/* Top Bar: Priority and Code */}
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
+                      <span className="font-mono text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-blue-900 text-white shadow-2xs border border-blue-950">
                         {project.code}
                       </span>
                       <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200">
@@ -262,15 +288,68 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
 
                   {/* Title & Area */}
                   <div>
-                    <span className="text-[11px] font-semibold text-blue-700 block mb-0.5">
-                      {project.area}
-                    </span>
-                    <h3
-                      onClick={() => onSelectProject(project)}
-                      className="text-sm font-bold text-slate-900 line-clamp-2 hover:text-blue-600 transition-colors cursor-pointer"
-                    >
-                      {project.title}
-                    </h3>
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="text-[11px] font-semibold text-blue-700">
+                        {project.area}
+                      </span>
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                        Título del Proyecto
+                      </span>
+                    </div>
+
+                    {editingTitleProjectId === project.id ? (
+                      <div className="space-y-1.5 my-1">
+                        <input
+                          type="text"
+                          value={tempTitle}
+                          onChange={(e) => setTempTitle(e.target.value)}
+                          className="w-full px-2.5 py-1 text-xs font-bold border-2 border-blue-500 rounded-lg bg-white focus:outline-none text-slate-900 shadow-xs"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveTitle(project);
+                            if (e.key === 'Escape') setEditingTitleProjectId(null);
+                          }}
+                        />
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveTitle(project)}
+                            className="px-2.5 py-0.5 bg-blue-600 text-white rounded text-[11px] font-bold hover:bg-blue-700 cursor-pointer shadow-2xs"
+                          >
+                            Guardar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingTitleProjectId(null)}
+                            className="px-2.5 py-0.5 bg-slate-200 text-slate-700 rounded text-[11px] font-semibold hover:bg-slate-300 cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between gap-1.5 group">
+                        <h3
+                          onClick={() => onSelectProject(project)}
+                          className="text-sm font-bold text-slate-900 line-clamp-2 hover:text-blue-600 transition-colors cursor-pointer flex-1"
+                          title={project.title}
+                        >
+                          {project.title}
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingTitleProjectId(project.id);
+                            setTempTitle(project.title);
+                          }}
+                          className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors shrink-0 cursor-pointer"
+                          title="Editar título del proyecto"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+
                     <span className="text-[10px] text-slate-500 block mt-1">
                       Creado por: <strong className="text-slate-700">{project.createdBy || 'Administrador General'}</strong>
                     </span>
@@ -307,7 +386,7 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
                       title="Cambiar estado del proyecto"
                     >
                       {ALL_PROJECT_STATES.map((st) => {
-                        const isCancel = st === '8- Cancelado';
+                        const isCancel = st === '8- Cancelado' || st === '08- Cancelado';
                         const disabledOpt = isCancel && !canUserCancelProject(currentUser, project);
                         return (
                           <option key={st} value={st} disabled={disabledOpt}>
@@ -420,7 +499,9 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
                         #{project.priority}
                       </td>
                       <td className="py-3 px-4 font-mono font-bold text-slate-800">
-                        {project.code}
+                        <span className="px-2 py-0.5 rounded bg-blue-900 text-white font-mono text-[11px] font-bold shadow-2xs">
+                          {project.code}
+                        </span>
                       </td>
                       <td className="py-3 px-4 font-medium text-slate-900">
                         {project.area}
@@ -437,13 +518,57 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
                           ))}
                         </div>
                       </td>
-                      <td className="py-3 px-4 font-semibold text-slate-900">
-                        <button
-                          onClick={() => onSelectProject(project)}
-                          className="hover:text-blue-600 text-left font-bold"
-                        >
-                          {project.title}
-                        </button>
+                      <td className="py-3 px-4 font-semibold text-slate-900 min-w-[260px]">
+                        {editingTitleProjectId === project.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={tempTitle}
+                              onChange={(e) => setTempTitle(e.target.value)}
+                              className="px-2 py-1 text-xs font-bold border-2 border-blue-500 rounded bg-white focus:outline-none flex-1 text-slate-900"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveTitle(project);
+                                if (e.key === 'Escape') setEditingTitleProjectId(null);
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleSaveTitle(project)}
+                              className="px-2 py-1 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 cursor-pointer shadow-2xs"
+                            >
+                              Guardar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingTitleProjectId(null)}
+                              className="px-2 py-1 bg-slate-200 text-slate-700 rounded text-xs font-semibold hover:bg-slate-300 cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2 group">
+                            <button
+                              onClick={() => onSelectProject(project)}
+                              className="hover:text-blue-600 text-left font-bold text-slate-900 flex-1 cursor-pointer"
+                              title="Ver ficha y cronograma"
+                            >
+                              {project.title}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingTitleProjectId(project.id);
+                                setTempTitle(project.title);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-all shrink-0 cursor-pointer"
+                              title="Editar título del proyecto"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <select
@@ -453,7 +578,7 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
                           title="Cambiar estado del proyecto"
                         >
                           {ALL_PROJECT_STATES.map((st) => {
-                            const isCancel = st === '8- Cancelado';
+                            const isCancel = st === '8- Cancelado' || st === '08- Cancelado';
                             const disabledOpt = isCancel && !canUserCancelProject(currentUser, project);
                             return (
                               <option key={st} value={st} disabled={disabledOpt}>

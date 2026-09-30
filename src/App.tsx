@@ -31,12 +31,14 @@ import {
   googleSignOut 
 } from './services/googleAuthService';
 import { isActionAssignedToUser, isPMO } from './utils/helpers';
+import { Trash2 } from 'lucide-react';
 
 export default function App() {
   const [projects, setProjects] = useState<SAPProject[]>(() => storageService.getProjects());
   const [currentUser, setCurrentUser] = useState<UserSession | null>(() => storageService.getCurrentUser());
   const [usersList, setUsersList] = useState<AppUser[]>(() => storageService.getUsers());
   const [isFirestoreConnected, setIsFirestoreConnected] = useState<boolean>(false);
+  const [isClearModalOpen, setIsClearModalOpen] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<'weekly' | 'tasks' | 'prioritization' | 'projects' | 'reports'>('weekly');
 
@@ -44,9 +46,7 @@ export default function App() {
   useEffect(() => {
     const unsubProjects = firestoreService.subscribeToProjects(
       (remoteProjects) => {
-        if (remoteProjects && remoteProjects.length > 0) {
-          setProjects(remoteProjects);
-        }
+        setProjects(remoteProjects || []);
         setIsFirestoreConnected(true);
       },
       (err) => {
@@ -405,10 +405,20 @@ export default function App() {
   };
 
   const handleResetData = () => {
-    const reset = storageService.resetDefaultData();
-    setProjects(reset);
-    setSelectedProjectForDetail(null);
-    firestoreService.resetToDefaults().catch((e) => console.warn('Firestore resetToDefaults error:', e));
+    setIsClearModalOpen(true);
+  };
+
+  const handleClearAllProjects = async () => {
+    try {
+      await firestoreService.deleteAllProjects();
+      setProjects([]);
+      setSelectedProjectForDetail(null);
+      setIsClearModalOpen(false);
+      showToast('Se eliminaron todos los proyectos viejos con éxito. La base de datos está limpia.', 'success');
+    } catch (e: any) {
+      console.error('Error clearing projects:', e);
+      showToast('Error al eliminar los proyectos: ' + (e?.message || ''), 'warn');
+    }
   };
 
   // Add Action Handler
@@ -576,6 +586,10 @@ export default function App() {
             onOpenAddAction={(p) => handleOpenAddAction(p)}
             onOpenEditAction={(p, a) => handleOpenEditAction(p, a)}
             onPreviewFile={handlePreviewFile}
+            onEditProject={(p) => {
+              setProjectToEdit(p);
+              setIsProjectFormOpen(true);
+            }}
           />
         )}
 
@@ -703,6 +717,10 @@ export default function App() {
           projects={projects}
           isOpen={isSheetsModalOpen}
           onClose={() => setIsSheetsModalOpen(false)}
+          onProjectsImported={(importedProjects) => {
+            setProjects(importedProjects);
+            showToast(`¡Carga exitosa! Se importaron ${importedProjects.length} proyectos oficiales desde Google Sheets.`, 'success');
+          }}
           onSyncCompleted={(lastSyncAt, spreadsheetUrl) => {
             setSheetsSyncState((prev) => ({
               ...prev,
@@ -725,6 +743,46 @@ export default function App() {
           onDisconnect={handleDisconnectGoogle}
           onSendTestEmail={handleSendTestEmail}
         />
+      )}
+
+      {/* MODAL: Confirm Delete Old Projects */}
+      {isClearModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Eliminar proyectos viejos</h3>
+                <p className="text-xs text-slate-500">Limpieza de datos de prueba</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              ¿Estás seguro de que querés eliminar todos los proyectos cargados hasta ahora?
+              Esta acción borrará los proyectos de prueba tanto de Firestore como de la memoria local, permitiéndote empezar limpio y cargar la lista oficial de los 74 proyectos.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsClearModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAllProjects}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Sí, eliminar proyectos viejos</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Subtle toast notification for automatic events */}

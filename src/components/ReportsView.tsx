@@ -345,10 +345,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ projects }) => {
     '#f59e0b', // amber (01- Pendiente)
     '#3b82f6', // blue (02- En relevamiento)
     '#8b5cf6', // purple (03- Consulta usuario)
+    '#0284c7', // light blue / cyan (04- Especificación Funcional)
     '#0ea5e9', // sky (05- En Desarrollo)
     '#6366f1', // indigo (06- Prueba Funcional)
     '#10b981', // emerald (07- Entregado)
-    '#64748b', // slate (8- Cancelado)
+    '#64748b', // slate (08- Cancelado)
   ];
 
   return (

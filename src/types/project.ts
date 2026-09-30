@@ -34,9 +34,10 @@ export const PROJECT_STAGES = [
   { id: 1, name: '01- Pendiente', code: '01' },
   { id: 2, name: '02- En relevamiento', code: '02' },
   { id: 3, name: '03-Consulta usuario', code: '03' },
-  { id: 4, name: '05- En Desarrollo', code: '05' },
-  { id: 5, name: '06- Prueba Funcional', code: '06' },
-  { id: 6, name: '07- Entregado', code: '07' },
+  { id: 4, name: '04- Especificación Funcional', code: '04' },
+  { id: 5, name: '05- En Desarrollo', code: '05' },
+  { id: 6, name: '06- Prueba Funcional', code: '06' },
+  { id: 7, name: '07- Entregado', code: '07' },
 ] as const;
 
 export type ProjectState =
@@ -44,20 +45,22 @@ export type ProjectState =
   | '02- En relevamiento'
   | '03-Consulta usuario'
   | '03- Consulta usuario'
+  | '04- Especificación Funcional'
   | '05- En Desarrollo'
   | '06- Prueba Funcional'
   | '07- Entregado'
-  | '8- Cancelado'
-  | '08- Cancelado';
+  | '08- Cancelado'
+  | '8- Cancelado';
 
 export const ALL_PROJECT_STATES: ProjectState[] = [
   '01- Pendiente',
   '02- En relevamiento',
   '03-Consulta usuario',
+  '04- Especificación Funcional',
   '05- En Desarrollo',
   '06- Prueba Funcional',
   '07- Entregado',
-  '8- Cancelado',
+  '08- Cancelado',
 ];
 
 export type ActionStatus = 'Pendiente' | 'En proceso' | 'Finalizada';

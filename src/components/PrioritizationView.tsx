@@ -60,8 +60,11 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
       }
 
       // 2. Filter by State
-      if (selectedState !== 'all' && project.state !== selectedState) {
-        return false;
+      if (selectedState !== 'all') {
+        const pCode = project.state.split('-')[0].trim();
+        const sCode = selectedState.split('-')[0].trim();
+        const matches = project.state === selectedState || (pCode && pCode === sCode);
+        if (!matches) return false;
       }
 
       // 3. Filter by SAP Module (using project.sapModules)
@@ -217,10 +220,11 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
     if (state.includes('01')) return 'bg-slate-100 text-slate-700 border-slate-300';
     if (state.includes('02')) return 'bg-sky-50 text-sky-700 border-sky-300';
     if (state.includes('03')) return 'bg-amber-50 text-amber-700 border-amber-300';
+    if (state.includes('04')) return 'bg-cyan-50 text-cyan-700 border-cyan-300';
     if (state.includes('05')) return 'bg-blue-50 text-blue-700 border-blue-300';
     if (state.includes('06')) return 'bg-purple-50 text-purple-700 border-purple-300';
     if (state.includes('07')) return 'bg-emerald-50 text-emerald-700 border-emerald-300';
-    if (state.includes('Cancelado') || state.includes('8')) return 'bg-rose-50 text-rose-700 border-rose-300';
+    if (state.includes('Cancelado') || state.includes('8') || state.includes('08')) return 'bg-rose-50 text-rose-700 border-rose-300';
     return 'bg-slate-100 text-slate-700 border-slate-300';
   };
 
@@ -313,7 +317,11 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
             >
               <option value="all">Todos los Estados ({projects.length})</option>
               {ALL_PROJECT_STATES.map((state) => {
-                const count = projects.filter((p) => p.state === state).length;
+                const count = projects.filter((p) => {
+                  const pCode = p.state.split('-')[0].trim();
+                  const sCode = state.split('-')[0].trim();
+                  return p.state === state || (pCode && pCode === sCode);
+                }).length;
                 return (
                   <option key={state} value={state}>
                     {state} ({count})

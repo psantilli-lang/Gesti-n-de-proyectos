@@ -3,6 +3,7 @@ import { INITIAL_PROJECTS, INITIAL_USERS, INITIAL_APP_USERS } from '../data/init
 
 const PROJECTS_STORAGE_KEY = 'sap_mejora_proyectos_v2';
 const LEGACY_STORAGE_KEY = 'sap_mejora_proyectos_v1';
+const BACKUP_STORAGE_KEY = 'sap_mejora_proyectos_backup_v1';
 const USER_STORAGE_KEY = 'sap_mejora_current_user_v1';
 const USERS_STORAGE_KEY = 'sap_mejora_users_v2';
 const AUTH_SESSION_KEY = 'sap_mejora_auth_session_v2';
@@ -10,26 +11,24 @@ const AUTH_SESSION_KEY = 'sap_mejora_auth_session_v2';
 function migrateProject(project: SAPProject): SAPProject {
   let newState = project.state;
   if (project.state.includes('Cancelado') || project.state.startsWith('8-') || project.state.startsWith('08-')) {
-    newState = '8- Cancelado';
-  } else if (project.state.includes('Cierre') || project.state.includes('7.')) {
+    newState = '08- Cancelado';
+  } else if (project.state.includes('Cierre') || project.state.includes('7.') || project.state === '07- Entregado') {
     newState = '07- Entregado';
-  } else if (project.state.includes('Implementación') || project.state.includes('6.')) {
+  } else if (project.state.includes('Prueba Funcional') || project.state.includes('6.') || project.state === '06- Prueba Funcional') {
     newState = '06- Prueba Funcional';
-  } else if (project.state.includes('Pruebas') || project.state.includes('UAT') || project.state.includes('5.')) {
-    newState = '06- Prueba Funcional';
-  } else if (project.state.includes('Configuración') || project.state.includes('Desarrollo') || project.state.includes('4.')) {
+  } else if (project.state.includes('Desarrollo') || project.state.includes('5.') || project.state === '05- En Desarrollo') {
     newState = '05- En Desarrollo';
-  } else if (project.state.includes('Aprobación') || project.state.includes('3.')) {
+  } else if (project.state.includes('Especificación') || project.state.includes('Funcional') || project.state.startsWith('04-')) {
+    newState = '04- Especificación Funcional';
+  } else if (project.state.includes('Consulta') || project.state.startsWith('03-')) {
     newState = '03-Consulta usuario';
-  } else if (project.state.includes('Factibilidad') || project.state.includes('Especificación') || project.state.includes('2.')) {
-    newState = '02- En relevamiento';
-  } else if (project.state.includes('Relevamiento') || project.state.includes('1.')) {
+  } else if (project.state.includes('Relevamiento') || project.state.startsWith('02-')) {
     newState = '02- En relevamiento';
   } else if (!ALL_PROJECT_STATES.includes(project.state as ProjectState)) {
     newState = '01- Pendiente';
   }
 
-  // Migrate schedule to the 6 stages if length differs or old stage names remain
+  // Migrate schedule to the 7 stages if length differs or stage names/codes mismatch
   let newSchedule = project.schedule;
   const needsScheduleMigration =
     !newSchedule ||
@@ -38,25 +37,30 @@ function migrateProject(project: SAPProject): SAPProject {
 
   if (needsScheduleMigration) {
     newSchedule = PROJECT_STAGES.map((stageDef, idx) => {
-      const oldStage = project.schedule?.[idx];
+      const matched = project.schedule?.find(
+        (s) => s.stageName === stageDef.name || s.stageName.startsWith(stageDef.code)
+      );
       return {
         stageId: stageDef.id,
         stageName: stageDef.name,
-        estimatedStartDate: oldStage?.estimatedStartDate || new Date().toISOString().split('T')[0],
-        estimatedEndDate: oldStage?.estimatedEndDate || new Date().toISOString().split('T')[0],
-        actualEndDate: oldStage?.actualEndDate,
-        status: oldStage?.status || (idx === 0 ? 'En curso' : 'No iniciada'),
+        estimatedStartDate: matched?.estimatedStartDate || new Date().toISOString().split('T')[0],
+        estimatedEndDate: matched?.estimatedEndDate || new Date().toISOString().split('T')[0],
+        actualEndDate: matched?.actualEndDate,
+        status: matched?.status || (idx === 0 ? 'En curso' : 'No iniciada'),
       };
     });
   }
 
   // Ensure actions have matching stageName and attachments array
   const newActions = (project.actions || []).map((action) => {
-    const matched = PROJECT_STAGES.find((s) => s.id === action.stageId) || PROJECT_STAGES[0];
+    const matched =
+      PROJECT_STAGES.find((s) => s.name === action.stageName || s.code === action.stageName?.slice(0, 2)) ||
+      PROJECT_STAGES.find((s) => s.id === action.stageId) ||
+      PROJECT_STAGES[0];
     return {
       ...action,
       stageId: matched.id,
-      stageName: action.stageName || matched.name,
+      stageName: matched.name,
       attachments: action.attachments || [],
       createdBy: action.createdBy || action.responsible || 'Administrador General (PMO SAP)',
     };
@@ -79,8 +83,32 @@ function migrateProject(project: SAPProject): SAPProject {
     newArea = legacyAreaMap[newArea];
   }
 
+  // Normalize project code: ensure ProySC- format for Crucianelli projects
+  let newCode = (project.code || '').trim();
+  const proyScMatch = newCode.match(/^proysc[-_\s]?(\d+)/i);
+  if (proyScMatch) {
+    newCode = `ProySC-${proyScMatch[1]}`;
+  } else {
+    const projNumMatch = newCode.match(/^(?:proyecto|proy)[-_\s]*(\d+)/i);
+    if (projNumMatch) {
+      newCode = `ProySC-${projNumMatch[1]}`;
+    } else if (/^\d{1,4}$/.test(newCode)) {
+      newCode = `ProySC-${newCode}`;
+    } else if (/^sap[-_]2026[-_](\d+)/i.test(newCode)) {
+      const num = parseInt(newCode.replace(/^sap[-_]2026[-_]/i, ''), 10);
+      if (!isNaN(num)) newCode = `ProySC-${num}`;
+    }
+  }
+
+  let newTitle = (project.title || '').trim();
+  if (!newTitle) {
+    newTitle = `Proyecto ${newCode}`;
+  }
+
   return {
     ...project,
+    code: newCode,
+    title: newTitle,
     area: newArea,
     state: newState,
     schedule: newSchedule,
@@ -109,9 +137,26 @@ export const storageService = {
       }
       if (data) {
         const parsed: SAPProject[] = JSON.parse(data);
-        const migrated = parsed.map(migrateProject);
-        this.saveProjects(migrated);
-        return migrated;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const migrated = parsed.map(migrateProject);
+          this.saveProjects(migrated);
+          return migrated;
+        }
+      }
+
+      // If empty in primary, attempt recovery from safety backup
+      const backupData = localStorage.getItem(BACKUP_STORAGE_KEY);
+      if (backupData) {
+        try {
+          const parsedBackup: SAPProject[] = JSON.parse(backupData);
+          if (Array.isArray(parsedBackup) && parsedBackup.length > 0) {
+            const migrated = parsedBackup.map(migrateProject);
+            this.saveProjects(migrated);
+            return migrated;
+          }
+        } catch {
+          // ignore parse error
+        }
       }
     } catch (e) {
       console.error('Error loading projects from localStorage', e);
@@ -124,8 +169,51 @@ export const storageService = {
   saveProjects(projects: SAPProject[]): void {
     try {
       localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
+      if (Array.isArray(projects) && projects.length > 0) {
+        // Maintain a persistent safety backup so accidental cloud empty states never wipe projects
+        localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(projects));
+      }
     } catch (e) {
       console.error('Error saving projects to localStorage', e);
+    }
+  },
+
+  hasBackup(): boolean {
+    try {
+      const backupData = localStorage.getItem(BACKUP_STORAGE_KEY);
+      if (backupData) {
+        const parsed = JSON.parse(backupData);
+        return Array.isArray(parsed) && parsed.length > 0;
+      }
+    } catch {
+      // ignore
+    }
+    return false;
+  },
+
+  restoreBackup(): SAPProject[] {
+    try {
+      const backupData = localStorage.getItem(BACKUP_STORAGE_KEY);
+      if (backupData) {
+        const parsed: SAPProject[] = JSON.parse(backupData);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const migrated = parsed.map(migrateProject);
+          this.saveProjects(migrated);
+          return migrated;
+        }
+      }
+    } catch (e) {
+      console.error('Error restoring backup projects', e);
+    }
+    return [];
+  },
+
+  clearAllProjects(): void {
+    try {
+      localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify([]));
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+    } catch (e) {
+      console.error('Error clearing projects from localStorage', e);
     }
   },
 
@@ -141,7 +229,7 @@ export const storageService = {
       if (data) {
         const parsed: AppUser[] = JSON.parse(data);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Ensure every user has username and password
+          // Ensure every user has username and unique ID
           let updated = false;
           const sanitized = parsed.map((u, idx) => {
             const copy = { ...u };
@@ -151,10 +239,6 @@ export const storageService = {
             }
             if (!copy.username) {
               copy.username = copy.email ? copy.email.split('@')[0].toLowerCase() : `usuario${idx + 1}`;
-              updated = true;
-            }
-            if (!copy.password) {
-              copy.password = copy.role === 'admin' ? 'admin' : 'sap2026';
               updated = true;
             }
             return copy;
@@ -168,7 +252,7 @@ export const storageService = {
     } catch (e) {
       console.error('Error loading users from localStorage', e);
     }
-    // Initialize default users with passwords
+    // Initialize default users
     this.saveUsers(INITIAL_APP_USERS);
     return INITIAL_APP_USERS;
   },
@@ -181,11 +265,50 @@ export const storageService = {
     }
   },
 
+  /**
+   * Strictly validates that the Google account's email is already registered in the whitelist.
+   * If not registered by an Administrator in Gestión de Usuarios, access is denied.
+   */
+  authenticateGoogleUser(googleUser: {
+    email: string;
+    displayName?: string | null;
+    photoURL?: string | null;
+  }): { success: boolean; user?: UserSession; message?: string } {
+    const users = this.getUsers();
+    const cleanEmail = googleUser.email.trim().toLowerCase();
+
+    const existing = users.find((u) => u.email && u.email.trim().toLowerCase() === cleanEmail);
+    if (!existing) {
+      return {
+        success: false,
+        message: `Acceso no autorizado: El correo "${googleUser.email}" no se encuentra en la nómina de usuarios habilitados. Por favor contactá al PMO / Administrador para solicitar tu alta previa.`,
+      };
+    }
+
+    // Update lastLogin and optional display name
+    existing.lastLogin = new Date().toISOString();
+    if (googleUser.displayName && !existing.name) {
+      existing.name = googleUser.displayName;
+    }
+    this.updateUser(existing);
+
+    const session: UserSession = {
+      id: existing.id,
+      name: existing.name,
+      username: existing.username,
+      email: existing.email,
+      role: existing.role,
+      area: existing.area,
+    };
+    this.setCurrentUser(session);
+    return { success: true, user: session };
+  },
+
   addUser(userData: {
     name: string;
     username: string;
     email: string;
-    password: string;
+    password?: string;
     role: UserRole;
     area?: string;
   }): { success: boolean; message?: string; user?: AppUser } {
@@ -196,8 +319,8 @@ export const storageService = {
     if (!cleanUsername) {
       return { success: false, message: 'El nombre de usuario es obligatorio.' };
     }
-    if (!userData.password || userData.password.length < 3) {
-      return { success: false, message: 'La contraseña debe tener al menos 3 caracteres.' };
+    if (userData.password && userData.password.length < 6) {
+      return { success: false, message: 'La contraseña debe tener al menos 6 caracteres por seguridad.' };
     }
     if (!userData.name.trim()) {
       return { success: false, message: 'El nombre completo es obligatorio.' };
