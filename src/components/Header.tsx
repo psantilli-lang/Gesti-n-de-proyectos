@@ -291,40 +291,25 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Right: Actions */}
           <div className="flex items-center gap-2 shrink-0 ml-auto">
-            {/* Google / Gmail Account Linking Button - Exclusively visible and manageable by PMO */}
+            {/* Central SMTP / Mail Configuration Button - Exclusively visible and manageable by PMO */}
             {isPMO(currentUser) && onOpenGoogleAccount && (
-              googleConnectedEmail ? (
-                <button
-                  type="button"
-                  onClick={onOpenGoogleAccount}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-blue-900 text-xs font-semibold transition-all cursor-pointer shadow-2xs whitespace-nowrap active:scale-[0.98]"
-                  title="Cuenta de correo vinculada para envíos automáticos (Gestión exclusiva PMO). Clic para opciones o cambiar cuenta."
-                >
-                  <Mail className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                  <span className="hidden sm:inline font-bold text-blue-700">Gmail:</span>
-                  <span className="max-w-[120px] md:max-w-[170px] truncate text-slate-800 font-medium">
-                    {googleConnectedEmail}
-                  </span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 inline-block" title="Conectado y listo para enviar correos" />
-                  <span className="px-1 py-0.2 bg-blue-200/80 text-blue-900 rounded text-[9px] font-extrabold uppercase ml-0.5">
-                    PMO
-                  </span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onOpenGoogleAccount}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-500 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all cursor-pointer shadow-xs whitespace-nowrap active:scale-[0.98]"
-                  title="Vincular cuenta de Google / Gmail para el envío de notificaciones automáticas (Exclusivo PMO)"
-                >
-                  <Mail className="w-3.5 h-3.5 text-white shrink-0" />
-                  <span>Vincular Gmail</span>
-                  <span className="w-2 h-2 rounded-full bg-amber-300 shrink-0 animate-pulse" />
-                  <span className="px-1 py-0.2 bg-blue-800 text-blue-100 rounded text-[9px] font-extrabold uppercase ml-0.5">
-                    PMO
-                  </span>
-                </button>
-              )
+              <button
+                type="button"
+                onClick={onOpenGoogleAccount}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-900 text-xs font-bold transition-all cursor-pointer shadow-2xs whitespace-nowrap active:scale-[0.98]"
+                title="Configuración del Servidor SMTP Central y Notificaciones Automáticas (Exclusivo PMO)"
+              >
+                <Mail className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span>Servidor de Mails (SMTP)</span>
+                {googleConnectedEmail ? (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 inline-block" title="Gmail conectado" />
+                ) : (
+                  <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0 inline-block" title="Gestor SMTP" />
+                )}
+                <span className="px-1 py-0.2 bg-indigo-200 text-indigo-950 rounded text-[9px] font-extrabold uppercase ml-0.5">
+                  PMO
+                </span>
+              </button>
             )}
 
             {/* Google Sheets Direct Open & Sync Controls */}

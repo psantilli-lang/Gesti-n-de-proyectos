@@ -2,10 +2,10 @@ import { SAPProject, UserSession, AppUser } from '../types/project';
 
 export const INITIAL_APP_USERS: AppUser[] = [
   {
-    id: 'usr-psantilli',
-    name: 'Paola Santilli (PMO SAP)',
-    username: 'psantilli',
-    email: 'psantilli@crucianelli.com',
+    id: 'usr-pmo',
+    name: 'Oficina de Proyectos (PMO SAP)',
+    username: 'pmo',
+    email: 'pmo.sap@empresa.com',
     role: 'pmo',
     area: 'Administración',
     createdAt: '2026-01-01T08:00:00.000Z',

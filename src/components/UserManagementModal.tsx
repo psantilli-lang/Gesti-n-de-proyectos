@@ -416,7 +416,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     Contraseña Actual del Usuario:
                   </span>
                   <span className="font-mono text-xs font-bold text-slate-900 select-all">
-                    {showCurrentPassword ? (userForPasswordChange.password || 'sap2026') : '••••••••'}
+                    {showCurrentPassword ? (userForPasswordChange.password || 'No asignada') : '••••••••'}
                   </span>
                 </div>
                 <button

@@ -548,6 +548,157 @@ export const emailNotificationService = {
   },
 
   /**
+   * Check if backend central SMTP is configured
+   */
+  async checkSmtpStatus(): Promise<{
+    configured: boolean;
+    senderEmail?: string | null;
+    maskedUser?: string | null;
+    host?: string;
+    port?: number;
+    from?: string;
+  }> {
+    try {
+      const res = await fetch('/api/mail/status');
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // server route may not be ready
+    }
+    return { configured: false };
+  },
+
+  /**
+   * Send an email via the central backend SMTP server (Node/Express with nodemailer)
+   */
+  async sendEmailViaBackendSmtp({
+    to,
+    subject,
+    htmlBody,
+    from,
+  }: {
+    to: string[];
+    subject: string;
+    htmlBody: string;
+    from?: string;
+  }): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const res = await fetch('/api/mail/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, subject, htmlBody, from }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || 'Error en servidor SMTP central.' };
+      }
+      return { success: true, messageId: data.messageId };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error de comunicación con el backend SMTP.' };
+    }
+  },
+
+  /**
+   * Send a test email via the central backend SMTP server
+   */
+  async sendSmtpTestEmail(to: string): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+      const res = await fetch('/api/mail/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || 'Error al verificar SMTP con Gmail.' };
+      }
+      return { success: true, message: data.message || 'Prueba SMTP exitosa.' };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error de conexión con el backend.' };
+    }
+  },
+
+  /**
+   * Configure SMTP credentials directly from PMO settings (stored securely in server .env)
+   */
+  async configureSmtpCredentials({
+    user,
+    pass,
+    host,
+    port,
+  }: {
+    user: string;
+    pass: string;
+    host?: string;
+    port?: number;
+  }): Promise<{ success: boolean; message?: string; error?: string; senderEmail?: string }> {
+    try {
+      const res = await fetch('/api/mail/configure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user, pass, host, port }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { success: false, error: data.error || 'Error al configurar credenciales SMTP.' };
+      }
+      return { success: true, message: data.message, senderEmail: data.senderEmail };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'No se pudo contactar al servidor.' };
+    }
+  },
+
+  /**
+   * Universal Dispatcher: Prioritizes central backend SMTP (works for all users without individual Google auth),
+   * falls back to individual user Gmail API if available.
+   */
+  async dispatchEmail({
+    to,
+    subject,
+    htmlBody,
+    accessToken,
+    senderEmail,
+  }: {
+    to: string[];
+    subject: string;
+    htmlBody: string;
+    accessToken?: string | null;
+    senderEmail?: string;
+  }): Promise<{ success: boolean; id?: string; error?: string; channel: 'smtp' | 'gmail_api' }> {
+    // 1. First attempt: Central backend SMTP
+    const smtpRes = await this.sendEmailViaBackendSmtp({ to, subject, htmlBody });
+    if (smtpRes.success) {
+      return { success: true, id: smtpRes.messageId, channel: 'smtp' };
+    }
+
+    // 2. Second attempt: User Gmail OAuth if active
+    if (accessToken) {
+      const gmailRes = await this.sendEmailViaGmail({
+        to,
+        subject,
+        htmlBody,
+        accessToken,
+        senderEmail,
+      });
+      if (gmailRes.success) {
+        return { success: true, id: gmailRes.id, channel: 'gmail_api' };
+      }
+      return {
+        success: false,
+        error: `SMTP: ${smtpRes.error} | Gmail API: ${gmailRes.error}`,
+        channel: 'gmail_api',
+      };
+    }
+
+    return {
+      success: false,
+      error: smtpRes.error || 'Servidor SMTP no configurado.',
+      channel: 'smtp',
+    };
+  },
+
+  /**
    * Send notification for a newly created project to all its team members
    */
   async sendNewProjectNotification({
@@ -557,8 +708,8 @@ export const emailNotificationService = {
     allUsers,
   }: {
     project: SAPProject;
-    accessToken: string;
-    senderEmail: string;
+    accessToken?: string | null;
+    senderEmail?: string;
     allUsers?: AppUser[];
   }): Promise<NotificationLog> {
     const recipientsSet = new Set<string>();
@@ -583,7 +734,7 @@ export const emailNotificationService = {
       projectTitle: project.title,
       recipients,
       sentAt: new Date().toISOString(),
-      senderEmail,
+      senderEmail: senderEmail || 'Servidor Central SMTP',
       status: 'failed',
       subject,
     };
@@ -594,7 +745,7 @@ export const emailNotificationService = {
       return log;
     }
 
-    const res = await this.sendEmailViaGmail({
+    const res = await this.dispatchEmail({
       to: recipients,
       subject,
       htmlBody,
@@ -625,8 +776,8 @@ export const emailNotificationService = {
   }: {
     project: SAPProject;
     action: StageAction;
-    accessToken: string;
-    senderEmail: string;
+    accessToken?: string | null;
+    senderEmail?: string;
     allUsers?: AppUser[];
   }): Promise<NotificationLog> {
     const recipient = this.resolveUserEmail(action.responsible, project, allUsers);
@@ -643,7 +794,7 @@ export const emailNotificationService = {
       actionTitle: action.title,
       recipients: recipient ? [recipient] : [],
       sentAt: new Date().toISOString(),
-      senderEmail,
+      senderEmail: senderEmail || 'Servidor Central SMTP',
       status: 'failed',
       subject,
     };
@@ -654,7 +805,7 @@ export const emailNotificationService = {
       return log;
     }
 
-    const res = await this.sendEmailViaGmail({
+    const res = await this.dispatchEmail({
       to: [recipient],
       subject,
       htmlBody,
@@ -682,8 +833,8 @@ export const emailNotificationService = {
     senderEmail,
   }: {
     reminder: PendingActionReminder;
-    accessToken: string;
-    senderEmail: string;
+    accessToken?: string | null;
+    senderEmail?: string;
   }): Promise<NotificationLog> {
     const log: NotificationLog = {
       id: reminder.id,
@@ -695,12 +846,12 @@ export const emailNotificationService = {
       actionTitle: reminder.action.title,
       recipients: [reminder.recipientEmail],
       sentAt: new Date().toISOString(),
-      senderEmail,
+      senderEmail: senderEmail || 'Servidor Central SMTP',
       status: 'failed',
       subject: reminder.suggestedSubject,
     };
 
-    const res = await this.sendEmailViaGmail({
+    const res = await this.dispatchEmail({
       to: [reminder.recipientEmail],
       subject: reminder.suggestedSubject,
       htmlBody: reminder.previewHtml,
@@ -761,7 +912,7 @@ export const emailNotificationService = {
   },
 
   /**
-   * Send a test email to verify Gmail API integration
+   * Send a test email to verify mail delivery (SMTP or Gmail API)
    */
   async sendTestEmail({
     to,
@@ -769,43 +920,59 @@ export const emailNotificationService = {
     senderEmail,
   }: {
     to: string;
-    accessToken: string;
-    senderEmail: string;
-  }): Promise<{ success: boolean; error?: string }> {
-    const htmlBody = `
-      <!DOCTYPE html>
-      <html>
-      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#f8fafc; margin:0; padding:24px; color:#1e293b;">
-        <div style="max-width:560px; margin:0 auto; background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
-          <div style="background:linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); padding:20px 24px; color:#ffffff;">
-            <p style="margin:0 0 4px 0; font-size:11px; text-transform:uppercase; letter-spacing:1px; opacity:0.85; font-weight:600;">Crucianelli • Mejora Continua SAP</p>
-            <h1 style="margin:0; font-size:20px; font-weight:bold;">✅ Vinculación de Correo Exitosa</h1>
-          </div>
-          <div style="padding:24px;">
-            <p style="margin:0 0 14px 0; font-size:14px; color:#334155;">
-              Este es un correo de prueba enviado desde el <strong>Sistema Integral de Proyectos SAP Crucianelli</strong>.
-            </p>
-            <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px 16px; margin-bottom:16px;">
-              <p style="margin:0; font-size:13px; color:#166534;">
-                <strong>Cuenta remitente configurada:</strong> ${senderEmail}<br/>
-                <strong>Estado:</strong> Vinculada correctamente con permisos de envío automático por Gmail.
+    accessToken?: string | null;
+    senderEmail?: string;
+  }): Promise<{ success: boolean; error?: string; channel?: 'smtp' | 'gmail_api' }> {
+    // 1. If backend central SMTP is configured, test SMTP directly
+    const smtpStatus = await this.checkSmtpStatus();
+    if (smtpStatus.configured) {
+      const smtpRes = await this.sendSmtpTestEmail(to);
+      return { success: smtpRes.success, error: smtpRes.error, channel: 'smtp' };
+    }
+
+    // 2. Fallback to Gmail OAuth if active
+    if (accessToken) {
+      const htmlBody = `
+        <!DOCTYPE html>
+        <html>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#f8fafc; margin:0; padding:24px; color:#1e293b;">
+          <div style="max-width:560px; margin:0 auto; background:#ffffff; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+            <div style="background:linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); padding:20px 24px; color:#ffffff;">
+              <p style="margin:0 0 4px 0; font-size:11px; text-transform:uppercase; letter-spacing:1px; opacity:0.85; font-weight:600;">Crucianelli • Mejora Continua SAP</p>
+              <h1 style="margin:0; font-size:20px; font-weight:bold;">✅ Vinculación de Correo Exitosa</h1>
+            </div>
+            <div style="padding:24px;">
+              <p style="margin:0 0 14px 0; font-size:14px; color:#334155;">
+                Este es un correo de prueba enviado desde el <strong>Sistema Integral de Proyectos SAP Crucianelli</strong>.
+              </p>
+              <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px 16px; margin-bottom:16px;">
+                <p style="margin:0; font-size:13px; color:#166534;">
+                  <strong>Cuenta remitente configurada:</strong> ${senderEmail || 'Cuenta Google vinculada'}<br/>
+                  <strong>Estado:</strong> Vinculada correctamente con permisos de envío por Gmail.
+                </p>
+              </div>
+              <p style="margin:0; font-size:12px; color:#64748b;">
+                A partir de ahora, cuando crees un proyecto o agregues una acción, las notificaciones saldrán automáticamente.
               </p>
             </div>
-            <p style="margin:0; font-size:12px; color:#64748b;">
-              A partir de ahora, cuando crees un proyecto o agregues una acción, las notificaciones saldrán automáticamente desde esta cuenta.
-            </p>
           </div>
-        </div>
-      </body>
-      </html>
-    `;
+        </body>
+        </html>
+      `;
 
-    return await this.sendEmailViaGmail({
-      to: [to],
-      subject: '✅ [Crucianelli SAP] Prueba de vinculación de correo exitosa',
-      htmlBody,
-      accessToken,
-      senderEmail,
-    });
+      const res = await this.sendEmailViaGmail({
+        to: [to],
+        subject: '✅ [Crucianelli SAP] Prueba de vinculación de correo exitosa',
+        htmlBody,
+        accessToken,
+        senderEmail,
+      });
+      return { success: res.success, error: res.error, channel: 'gmail_api' };
+    }
+
+    return {
+      success: false,
+      error: 'El servidor SMTP no está configurado en .env (se requieren SMTP_USER y SMTP_PASS).',
+    };
   },
 };

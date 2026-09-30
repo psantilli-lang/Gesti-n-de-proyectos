@@ -155,13 +155,7 @@ export default function App() {
 
   const handleSendTestEmail = async (toEmail: string) => {
     const token = getAccessToken();
-    const sender = googleConnectedEmail || getCurrentGoogleUser()?.email || 'notificaciones@crucianelli.com';
-    if (!token) {
-      return { 
-        success: false, 
-        error: 'No se detectó un token de acceso activo. Por favor vuelve a hacer clic en "Vincular Gmail" para autorizar el envío.' 
-      };
-    }
+    const sender = googleConnectedEmail || getCurrentGoogleUser()?.email || undefined;
     return await emailNotificationService.sendTestEmail({
       to: toEmail,
       accessToken: token,
@@ -196,10 +190,9 @@ export default function App() {
 
   // Automatic background circuit for action reminders (Due today or Overdue every 15 days)
   useEffect(() => {
+    if (projects.length === 0) return;
     const token = getAccessToken();
-    if (!token || projects.length === 0) return;
-
-    const sender = getCurrentGoogleUser()?.email || currentUser?.email || 'notificaciones@crucianelli.com';
+    const sender = getCurrentGoogleUser()?.email || currentUser?.email || undefined;
 
     const timer = setTimeout(async () => {
       try {
@@ -305,29 +298,24 @@ export default function App() {
         .filter((e): e is string => !!e);
 
       const token = getAccessToken();
-      const sender = getCurrentGoogleUser()?.email || currentUser?.email || 'notificaciones@crucianelli.com';
+      const sender = getCurrentGoogleUser()?.email || currentUser?.email || undefined;
 
       if (teamEmails.length > 0) {
-        if (token) {
-          emailNotificationService
-            .sendNewProjectNotification({
-              project: savedProject,
-              accessToken: token,
-              senderEmail: sender,
-              allUsers: usersList,
-            })
-            .then((log) => {
-              if (log.status === 'sent') {
-                showToast(`✉️ Notificación enviada automáticamente a los integrantes del proyecto.`);
-              } else {
-                console.warn('Fallo al enviar notificación de nuevo proyecto:', log.error);
-                showToast(`⚠️ No se pudo enviar el correo de nuevo proyecto: ${log.error || 'Verificá permisos'}`, 'warn');
-              }
-            })
-            .catch((err) => console.warn('Error en notificación nuevo proyecto:', err));
-        } else {
-          showToast(`ℹ️ Proyecto creado. Hacé clic en "Vincular Gmail" en la barra superior para activar el envío automático.`, 'warn');
-        }
+        emailNotificationService
+          .sendNewProjectNotification({
+            project: savedProject,
+            accessToken: token,
+            senderEmail: sender,
+            allUsers: usersList,
+          })
+          .then((log) => {
+            if (log.status === 'sent') {
+              showToast(`✉️ Notificación enviada automáticamente a los integrantes del proyecto.`);
+            } else {
+              console.warn('Fallo al enviar notificación de nuevo proyecto:', log.error);
+            }
+          })
+          .catch((err) => console.warn('Error en notificación nuevo proyecto:', err));
       }
 
       // Also trigger notifications for any actions created within this project form
@@ -339,26 +327,22 @@ export default function App() {
             usersList
           );
           if (actRecipient) {
-            if (token) {
-              emailNotificationService
-                .sendNewActionNotification({
-                  project: savedProject,
-                  action: act,
-                  accessToken: token,
-                  senderEmail: sender,
-                  allUsers: usersList,
-                })
-                .then((log) => {
-                  if (log.status === 'sent') {
-                    showToast(`✉️ Notificación enviada a ${act.responsible} (${actRecipient}).`);
-                  } else {
-                    console.warn('Fallo al enviar acción:', log.error);
-                  }
-                })
-                .catch((err) => console.warn('Error enviando acción:', err));
-            } else {
-              showToast(`ℹ️ Acción asignada a ${act.responsible}. Vincular Gmail para emitir el correo.`, 'warn');
-            }
+            emailNotificationService
+              .sendNewActionNotification({
+                project: savedProject,
+                action: act,
+                accessToken: token,
+                senderEmail: sender,
+                allUsers: usersList,
+              })
+              .then((log) => {
+                if (log.status === 'sent') {
+                  showToast(`✉️ Notificación enviada a ${act.responsible} (${actRecipient}).`);
+                } else {
+                  console.warn('Fallo al enviar acción:', log.error);
+                }
+              })
+              .catch((err) => console.warn('Error enviando acción:', err));
           }
         });
       }

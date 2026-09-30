@@ -229,9 +229,14 @@ export const storageService = {
       if (data) {
         const parsed: AppUser[] = JSON.parse(data);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          // Purge any personal credentials or legacy psantilli entry if present
+          let filtered = parsed.filter(
+            (u) => !u.email?.includes('psantilli') && !u.username?.includes('psantilli') && u.id !== 'usr-psantilli'
+          );
+          let updated = filtered.length !== parsed.length;
+
           // Ensure every user has username and unique ID
-          let updated = false;
-          const sanitized = parsed.map((u, idx) => {
+          const sanitized = filtered.map((u, idx) => {
             const copy = { ...u };
             if (!copy.id) {
               copy.id = `usr-${idx + 1}`;

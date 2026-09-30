@@ -94,6 +94,10 @@ export const clearStoredToken = (): void => {
   try {
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
     sessionStorage.removeItem(SESSION_USER_KEY);
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    localStorage.removeItem(SESSION_USER_KEY);
+    localStorage.removeItem('google_workspace_access_token');
+    localStorage.removeItem('google_workspace_user_email');
   } catch {}
 };
 
