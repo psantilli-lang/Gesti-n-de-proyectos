@@ -46,7 +46,10 @@ import {
   Check,
   X,
   Edit3,
+  Table,
+  LayoutGrid,
 } from 'lucide-react';
+import { WeeklyReviewTable } from './WeeklyReviewTable';
 
 interface MultiSelectOption {
   value: string;
@@ -272,6 +275,8 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
+  const [selectedProjectCodes, setSelectedProjectCodes] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending-actions' | 'delayed'>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [editingTitleProjectId, setEditingTitleProjectId] = useState<string | null>(null);
@@ -336,11 +341,22 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
     }));
   }, [uniquePriorities, projects]);
 
+  const codeOptions: MultiSelectOption[] = useMemo(() => {
+    return projects
+      .map((p) => ({
+        value: p.code,
+        label: `${p.code} - ${p.title}`,
+        count: 1,
+      }))
+      .sort((a, b) => a.value.localeCompare(b.value, undefined, { numeric: true }));
+  }, [projects]);
+
   // Check if any filter is actively restricting results
   const hasActiveFilters =
     selectedAreas.length > 0 ||
     selectedStates.length > 0 ||
     selectedPriorities.length > 0 ||
+    selectedProjectCodes.length > 0 ||
     statusFilter !== 'all' ||
     searchTerm.trim() !== '';
 
@@ -348,6 +364,7 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
     setSelectedAreas([]);
     setSelectedStates([]);
     setSelectedPriorities([]);
+    setSelectedProjectCodes([]);
     setStatusFilter('all');
     setSearchTerm('');
   };
@@ -372,6 +389,11 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
 
       // 3. Priority match (multi-select)
       if (selectedPriorities.length > 0 && !selectedPriorities.includes(p.priority.toString())) {
+        return false;
+      }
+
+      // 4. Project Number / Code match (multi-select)
+      if (selectedProjectCodes.length > 0 && !selectedProjectCodes.includes(p.code)) {
         return false;
       }
 
@@ -566,6 +588,19 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
               />
             </div>
 
+            {/* Project Code / Number multi-select filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-slate-600">N° Proyecto:</span>
+              <MultiSelectDropdown
+                label="Filtrar por N° Proyecto"
+                options={codeOptions}
+                selectedValues={selectedProjectCodes}
+                onChange={setSelectedProjectCodes}
+                allLabel="Todos los N°"
+                totalCount={projects.length}
+              />
+            </div>
+
             {/* Status / Condition Quick Buttons */}
             <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
               <button
@@ -595,24 +630,56 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
             </div>
           </div>
 
-          {/* Search input */}
-          <div className="relative min-w-[240px] sm:min-w-[280px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Buscar por código, título, acción o responsable..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-            {searchTerm && (
+          <div className="flex items-center gap-3">
+            {/* View Mode Toggle: Tabla vs Tarjetas */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
               <button
-                onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Vista Formato Tabla (Recomendada para la Barrida Semanal)"
               >
-                ×
+                <Table className="w-3.5 h-3.5" />
+                <span>Vista Tabla</span>
               </button>
-            )}
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'cards'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Vista Tarjetas Agrupadas por Área"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Vista Tarjetas</span>
+              </button>
+            </div>
+
+            {/* Search input */}
+            <div className="relative min-w-[220px] sm:min-w-[260px]">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar proyecto o acción..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -661,6 +728,21 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
                     onClick={() => setSelectedPriorities(selectedPriorities.filter((p) => p !== prio))}
                     className="hover:text-amber-950 font-bold ml-0.5 text-xs cursor-pointer"
                     title={`Quitar prioridad #${prio}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              {selectedProjectCodes.map((code) => (
+                <span
+                  key={code}
+                  className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-900 px-2 py-0.5 rounded-md font-medium text-[11px]"
+                >
+                  N° Proy: {code}
+                  <button
+                    onClick={() => setSelectedProjectCodes(selectedProjectCodes.filter((c) => c !== code))}
+                    className="hover:text-indigo-950 font-bold ml-0.5 text-xs cursor-pointer"
+                    title={`Quitar proyecto ${code}`}
                   >
                     ×
                   </button>
@@ -718,6 +800,19 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
             </button>
           )}
         </div>
+      ) : viewMode === 'table' ? (
+        <WeeklyReviewTable
+          projects={filteredProjects}
+          currentUser={currentUser}
+          onUpdateProject={onUpdateProject}
+          onSelectProject={onSelectProject}
+          onOpenAddAction={onOpenAddAction}
+          onOpenEditAction={onOpenEditAction}
+          onPreviewFile={onPreviewFile}
+          onStateChange={handleStateChange}
+          onPriorityChange={handlePriorityChange}
+          onActionStatusChange={handleQuickActionStatusChange}
+        />
       ) : (
         <div className="space-y-8">
           {(Object.entries(groupedByArea) as [string, SAPProject[]][]).map(([areaName, areaProjects]) => (

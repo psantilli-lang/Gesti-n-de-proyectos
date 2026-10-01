@@ -444,26 +444,28 @@ export default function App() {
       const token = getAccessToken();
       const sender = getCurrentGoogleUser()?.email || currentUser?.email || 'notificaciones@crucianelli.com';
 
-      if (token) {
-        emailNotificationService
-          .sendNewActionNotification({
-            project,
-            action: newAction,
-            accessToken: token,
-            senderEmail: sender,
-            allUsers: usersList,
-          })
-          .then((log) => {
-            if (log.status === 'sent') {
-              showToast(`✉️ Notificación enviada automáticamente a ${newAction.responsible} (${recipientEmail}).`);
+      emailNotificationService
+        .sendNewActionNotification({
+          project,
+          action: newAction,
+          accessToken: token,
+          senderEmail: sender,
+          allUsers: usersList,
+        })
+        .then((log) => {
+          if (log.status === 'sent') {
+            showToast(`✉️ Notificación enviada con éxito a ${newAction.responsible} (${recipientEmail}).`, 'success');
+          } else {
+            if (!token) {
+              showToast(`ℹ️ Acción asignada a ${newAction.responsible} (${recipientEmail}). Para enviar correos automáticos, vinculá tu cuenta de Google o SMTP.`, 'info');
             } else {
-              console.warn('Fallo al enviar notificación de acción:', log.error);
+              showToast(`⚠️ No se pudo enviar el correo a ${recipientEmail}: ${log.error || 'Error de envío'}.`, 'warn');
             }
-          })
-          .catch((err) => console.warn('Error en notificación nueva acción:', err));
-      } else {
-        showToast(`ℹ️ Acción asignada. Conectá Google para emitir notificaciones automáticas por correo a ${recipientEmail}.`, 'info');
-      }
+          }
+        })
+        .catch((err) => console.warn('Error en notificación nueva acción:', err));
+    } else {
+      showToast(`ℹ️ Acción asignada a ${newAction.responsible}. Sin correo electrónico registrado para notificar.`, 'info');
     }
   };
 

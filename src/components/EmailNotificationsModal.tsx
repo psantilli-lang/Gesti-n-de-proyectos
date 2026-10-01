@@ -94,19 +94,6 @@ export const EmailNotificationsModal: React.FC<EmailNotificationsModalProps> = (
     const token = accessToken || getAccessToken();
     const sender = googleUser?.email || currentUser.email || 'notificaciones@crucianelli.com';
 
-    if (!token) {
-      setStatusMessage({
-        text: 'Por favor iniciá sesión con Google para enviar el correo a través de Gmail.',
-        type: 'error',
-      });
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `¿Confirmás el envío de este recordatorio a "${reminder.recipientName}" (${reminder.recipientEmail}) vía Gmail?\n\nAsunto: ${reminder.suggestedSubject}`
-    );
-    if (!confirmed) return;
-
     setIsSending(true);
     setStatusMessage(null);
 
@@ -125,7 +112,7 @@ export const EmailNotificationsModal: React.FC<EmailNotificationsModalProps> = (
         reloadReminders();
       } else {
         setStatusMessage({
-          text: `Error al enviar correo: ${result.error || 'Fallo desconocido'}`,
+          text: `Error al enviar correo: ${result.error || 'Verificá el servidor SMTP o conectá Google.'}`,
           type: 'error',
         });
       }
@@ -143,24 +130,11 @@ export const EmailNotificationsModal: React.FC<EmailNotificationsModalProps> = (
     const token = accessToken || getAccessToken();
     const sender = googleUser?.email || currentUser.email || 'notificaciones@crucianelli.com';
 
-    if (!token) {
-      setStatusMessage({
-        text: 'Por favor iniciá sesión con Google para enviar los correos a través de Gmail.',
-        type: 'error',
-      });
-      return;
-    }
-
     if (reminders.length === 0) return;
-
-    const confirmed = window.confirm(
-      `¿Confirmás el envío de ${reminders.length} recordatorio(s) de acciones pendientes por Gmail a sus respectivos responsables?`
-    );
-    if (!confirmed) return;
 
     setIsSending(true);
     setStatusMessage({
-      text: `Enviando ${reminders.length} notificaciones por Gmail...`,
+      text: `Enviando ${reminders.length} notificaciones por correo...`,
       type: 'info',
     });
 
@@ -184,15 +158,15 @@ export const EmailNotificationsModal: React.FC<EmailNotificationsModalProps> = (
     setIsSending(false);
     reloadReminders();
 
-    if (failCount === 0) {
+    if (sentCount > 0) {
       setStatusMessage({
-        text: `Se enviaron exitosamente las ${sentCount} notificaciones vía Gmail.`,
-        type: 'success',
+        text: `Proceso completado: ${sentCount} correo(s) enviado(s) con éxito.${failCount > 0 ? ` (${failCount} fallaron)` : ''}`,
+        type: failCount > 0 ? 'info' : 'success',
       });
     } else {
       setStatusMessage({
-        text: `Enviadas: ${sentCount}. Fallidas: ${failCount}. Consultá el historial para más detalles.`,
-        type: 'info',
+        text: `No se pudieron despachar los correos. Verificá que el servidor SMTP central esté configurado o vinculá Gmail.`,
+        type: 'error',
       });
     }
   };

@@ -62,6 +62,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // In-app deletion dialog states (no window.confirm)
+  const [userToDelete, setUserToDelete] = useState<AppUser | null>(null);
+  const [showBulkConfirm, setShowBulkConfirm] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
   const refreshUsers = () => {
     const updated = storageService.getUsers();
     setUsers(updated);
@@ -174,25 +179,60 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     }
   };
 
-  const handleDeleteUser = (user: AppUser) => {
-    if (user.id === currentUser.id || user.username === currentUser.username) {
-      alert('No podés eliminar tu propia cuenta en sesión activa.');
-      return;
-    }
+  const defaultSampleUsernames = ['admin', 'pmo', 'crossi', 'mvaldez', 'eduarte', 'sfontana', 'rperez'];
+  const defaultSampleIds = ['usr-admin', 'usr-pmo', 'usr-rossi', 'usr-valdez', 'usr-duarte', 'usr-fontana', 'usr-perez'];
 
-    const confirmDel = window.confirm(
-      `¿Estás seguro de que deseas eliminar al usuario "${user.name}" (@${user.username})?\nEsta acción no se puede deshacer.`
-    );
-    if (!confirmDel) return;
+  const defaultUsersInList = users.filter((u) => {
+    const isSample = defaultSampleUsernames.includes(u.username.toLowerCase()) || 
+                     defaultSampleIds.includes(u.id.toLowerCase());
+    const isSelf = u.id === currentUser.id || u.username.toLowerCase() === currentUser.username.toLowerCase();
+    return isSample && !isSelf;
+  });
 
-    const res = storageService.deleteUser(user.id);
-    if (res.success) {
-      firestoreService.deleteUser(user.id).catch((e) => console.warn('Firestore delete user error:', e));
-      setSuccessMsg(`Usuario "${user.name}" eliminado.`);
+  const executeBulkDelete = async () => {
+    setIsDeleting(true);
+    setErrorMsg(null);
+    try {
+      const targetIds = defaultUsersInList.map((u) => u.id);
+      await firestoreService.deleteUsers(targetIds);
+      storageService.deleteUsers(targetIds);
+
+      const remaining = users.filter(
+        (u) => !targetIds.includes(u.id) && !defaultSampleUsernames.includes(u.username.toLowerCase())
+      );
+      setUsers(remaining);
+
+      setSuccessMsg(`Se eliminaron con éxito los ${defaultUsersInList.length} usuarios por defecto.`);
+      setShowBulkConfirm(false);
       refreshUsers();
-      setTimeout(() => setSuccessMsg(null), 2500);
-    } else {
-      setErrorMsg(res.message || 'Error al eliminar usuario.');
+    } catch (err) {
+      console.error('Error in executeBulkDelete:', err);
+      setErrorMsg('Ocurrió un error al eliminar los usuarios.');
+    } finally {
+      setIsDeleting(false);
+      setTimeout(() => setSuccessMsg(null), 3000);
+    }
+  };
+
+  const executeDeleteUser = async (user: AppUser) => {
+    setIsDeleting(true);
+    setErrorMsg(null);
+    try {
+      await firestoreService.deleteUser(user.id);
+      storageService.deleteUser(user.id);
+
+      setUsers((prev) =>
+        prev.filter((u) => u.id !== user.id && u.username.toLowerCase() !== user.username.toLowerCase())
+      );
+      setSuccessMsg(`Usuario "${user.name}" eliminado correctamente.`);
+      setUserToDelete(null);
+      refreshUsers();
+    } catch (err) {
+      console.error('Error in executeDeleteUser:', err);
+      setErrorMsg('Ocurrió un error al eliminar el usuario.');
+    } finally {
+      setIsDeleting(false);
+      setTimeout(() => setSuccessMsg(null), 3000);
     }
   };
 
@@ -671,8 +711,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           {/* 4. USER LIST TAB */}
           {activeTab === 'list' && !userToEdit && !userForPasswordChange && (
             <div className="space-y-4">
-              {/* Search input */}
-              <div className="flex items-center justify-between gap-3">
+              {/* Search input and action buttons */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="relative flex-1 max-w-sm">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                   <input
@@ -684,9 +724,23 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   />
                 </div>
 
-                <span className="text-xs text-slate-400">
-                  Mostrando {filteredUsers.length} de {users.length} usuarios
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {defaultUsersInList.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowBulkConfirm(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-colors cursor-pointer shadow-2xs"
+                      title="Elimina todos los usuarios de prueba que vinieron por defecto y deja solo los que creaste"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Eliminar usuarios por defecto ({defaultUsersInList.length})</span>
+                    </button>
+                  )}
+
+                  <span className="text-xs text-slate-400">
+                    Mostrando {filteredUsers.length} de {users.length} usuarios
+                  </span>
+                </div>
               </div>
 
               {/* Users Table */}
@@ -709,6 +763,8 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     {filteredUsers.map((u) => {
                       const isSelf = u.id === currentUser.id || u.username === currentUser.username;
                       const isPasswordRevealed = showAllPasswords || !!visiblePasswords[u.id];
+                      const isSampleUser = defaultSampleUsernames.includes(u.username.toLowerCase()) || 
+                                           defaultSampleIds.includes(u.id.toLowerCase());
 
                       return (
                         <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
@@ -718,9 +774,21 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                                 {u.name.substring(0, 2)}
                               </div>
                               <div>
-                                <span className="font-bold text-slate-900 block leading-tight">
-                                  {u.name}
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-900 block leading-tight">
+                                    {u.name}
+                                  </span>
+                                  {isSampleUser && (
+                                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200 font-medium">
+                                      Por defecto
+                                    </span>
+                                  )}
+                                  {isSelf && (
+                                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200 font-bold">
+                                      Tú
+                                    </span>
+                                  )}
+                                </div>
                                 <span className="text-[11px] text-slate-500 block">{u.email}</span>
                               </div>
                             </div>
@@ -792,7 +860,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
                               <button
                                 type="button"
-                                onClick={() => handleDeleteUser(u)}
+                                onClick={() => setUserToDelete(u)}
                                 disabled={isSelf}
                                 className={`p-1.5 rounded-md transition-colors cursor-pointer ${
                                   isSelf
@@ -831,6 +899,87 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* IN-APP CONFIRMATION MODAL: DELETE SINGLE USER */}
+      {userToDelete && (
+        <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-2xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 text-center space-y-4 animate-in fade-in zoom-in-95">
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900">
+              ¿Eliminar usuario?
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Estás a punto de eliminar al usuario <strong className="text-slate-900">{userToDelete.name}</strong> (<span className="font-mono">@{userToDelete.username}</span>). Esta cuenta se borrará de forma inmediata y definitiva del sistema.
+            </p>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setUserToDelete(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => executeDeleteUser(userToDelete)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
+              >
+                {isDeleting ? 'Eliminando...' : 'Sí, Eliminar Usuario'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IN-APP CONFIRMATION MODAL: BULK DELETE DEFAULT USERS */}
+      {showBulkConfirm && (
+        <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-2xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 text-center space-y-4 animate-in fade-in zoom-in-95">
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900">
+              ¿Eliminar todos los usuarios por defecto?
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Se eliminarán definitivamente los <strong>{defaultUsersInList.length} usuarios precargados de prueba</strong>:
+            </p>
+            <div className="max-h-36 overflow-y-auto bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-left text-xs space-y-1">
+              {defaultUsersInList.map((u) => (
+                <div key={u.id} className="flex items-center justify-between text-slate-700 py-0.5 border-b border-slate-100 last:border-0">
+                  <span className="font-semibold">{u.name}</span>
+                  <span className="font-mono text-slate-500 text-[11px]">@{u.username}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Se conservarán únicamente los usuarios creados por vos y tu cuenta activa (<strong className="text-slate-800">{currentUser.name}</strong>).
+            </p>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBulkConfirm(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={executeBulkDelete}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
+              >
+                {isDeleting ? 'Eliminando...' : `Sí, Eliminar (${defaultUsersInList.length}) Usuarios`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

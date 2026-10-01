@@ -3,11 +3,13 @@ import {
   SAPProject, 
   StageAction, 
   UserSession, 
+  AppUser,
   ActionStatus, 
   ActionComment,
   AttachedFile,
   PROJECT_STAGES
 } from '../types/project';
+import { storageService } from '../services/storageService';
 import { 
   canUserEditAction, 
   canUserAddAction,
@@ -38,7 +40,7 @@ interface AddActionModalProps {
   project: SAPProject;
   defaultStageId?: number;
   currentUser: UserSession;
-  allUsers: UserSession[];
+  allUsers?: (UserSession | AppUser)[];
   onClose: () => void;
   onAddAction: (newAction: StageAction, keepOpen?: boolean) => void;
   onPreviewFile?: (file: AttachedFile, projectTitle?: string) => void;
@@ -77,20 +79,80 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
     return d.toISOString().split('T')[0];
   });
 
-  // Responsible person options from project team + all users
+  // 100% of app users guaranteed (combining storageService and props)
+  const allAppUsers = React.useMemo(() => {
+    const map = new Map<string, { name: string; email?: string; role?: string }>();
+    try {
+      storageService.getUsers().forEach((u) => {
+        if (u.name && u.name.trim()) {
+          map.set(u.name.trim().toLowerCase(), {
+            name: u.name.trim(),
+            email: u.email,
+            role: u.role,
+          });
+        }
+      });
+    } catch {}
+
+    if (allUsers) {
+      allUsers.forEach((u) => {
+        if (u.name && u.name.trim()) {
+          const key = u.name.trim().toLowerCase();
+          const existing = map.get(key);
+          map.set(key, {
+            name: u.name.trim(),
+            email: u.email || existing?.email,
+            role: u.role || existing?.role,
+          });
+        }
+      });
+    }
+
+    if (currentUser?.name && currentUser.name.trim()) {
+      const key = currentUser.name.trim().toLowerCase();
+      const existing = map.get(key);
+      map.set(key, {
+        name: currentUser.name.trim(),
+        email: currentUser.email || existing?.email,
+        role: currentUser.role || existing?.role,
+      });
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allUsers, currentUser]);
+
+  // Responsible person options from 100% of app users + project team
   const responsibleOptions = React.useMemo(() => {
-    const names = new Set<string>();
-    project.team.forEach((t) => {
-      if (t.name) names.add(t.name);
+    const map = new Map<string, { name: string; email?: string; role?: string }>();
+
+    // 100% of app users
+    allAppUsers.forEach((u) => {
+      map.set(u.name.trim().toLowerCase(), {
+        name: u.name.trim(),
+        email: u.email,
+        role: u.role,
+      });
     });
-    allUsers.forEach((u) => {
-      if (u.role === 'responsible') names.add(u.name);
+
+    // Project team members (in case someone was added manually)
+    (project.team || []).forEach((t) => {
+      if (t.name && t.name.trim()) {
+        const key = t.name.trim().toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, {
+            name: t.name.trim(),
+            email: t.email,
+            role: t.role,
+          });
+        }
+      }
     });
-    return Array.from(names);
-  }, [project, allUsers]);
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allAppUsers, project.team]);
 
   const [responsible, setResponsible] = useState<string>(() => {
-    if (responsibleOptions.length > 0) return responsibleOptions[0];
+    if (responsibleOptions.length > 0) return responsibleOptions[0].name;
     return currentUser?.name || 'Responsable';
   });
 
@@ -267,15 +329,25 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
               </label>
               <select
                 value={responsible}
-                onChange={(e) => setResponsible(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setResponsible(val);
+                  if (val !== '__custom__') {
+                    const match = responsibleOptions.find((o) => o.name === val);
+                    if (match?.email) {
+                      setCustomResponsibleEmail(match.email);
+                    }
+                  }
+                }}
+                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
               >
-                {responsibleOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
+                <option value="">-- Seleccionar Responsable ({responsibleOptions.length} usuarios) --</option>
+                {responsibleOptions.map((opt) => (
+                  <option key={opt.name} value={opt.name}>
+                    {opt.name} {opt.email ? `• ${opt.email}` : ''} {opt.role ? `(${opt.role})` : ''}
                   </option>
                 ))}
-                <option value="__custom__">+ Otro responsable...</option>
+                <option value="__custom__">+ Otro responsable personalizado...</option>
               </select>
 
               {responsible === '__custom__' && (

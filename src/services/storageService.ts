@@ -230,31 +230,18 @@ export const storageService = {
       if (data) {
         try {
           const parsed = JSON.parse(data);
-          if (Array.isArray(parsed) && parsed.length > 0) {
+          if (Array.isArray(parsed)) {
             usersList = parsed;
           }
         } catch {}
       }
 
-      if (usersList.length === 0) {
+      // Only initialize with INITIAL_APP_USERS if never initialized before
+      if (!data) {
         usersList = [...INITIAL_APP_USERS];
       }
 
       let updated = false;
-
-      // Ensure essential initial users (psantilli, admin, pmo) always exist
-      INITIAL_APP_USERS.forEach((initUser) => {
-        const exists = usersList.some(
-          (u) =>
-            (u.username && u.username.toLowerCase() === initUser.username.toLowerCase()) ||
-            (u.email && u.email.toLowerCase() === initUser.email.toLowerCase()) ||
-            u.id === initUser.id
-        );
-        if (!exists) {
-          usersList.unshift({ ...initUser });
-          updated = true;
-        }
-      });
 
       // Ensure every user has username, password, and unique ID
       const sanitized = usersList.map((u, idx) => {
@@ -280,7 +267,6 @@ export const storageService = {
       return sanitized;
     } catch (e) {
       console.error('Error loading users from localStorage', e);
-      this.saveUsers(INITIAL_APP_USERS);
       return INITIAL_APP_USERS;
     }
   },
@@ -440,22 +426,31 @@ export const storageService = {
 
   deleteUser(userId: string): { success: boolean; message?: string } {
     const users = this.getUsers();
-    const target = users.find((u) => u.id === userId);
+    const cleanId = userId.trim().toLowerCase();
+    const target = users.find(
+      (u) => u.id.toLowerCase() === cleanId || u.username.toLowerCase() === cleanId
+    );
     if (!target) {
       return { success: false, message: 'El usuario no existe.' };
     }
 
-    // Protection: do not delete the last PMO
-    if (target.role === 'admin' || target.role === 'pmo') {
-      const pmoCount = users.filter((u) => u.role === 'admin' || u.role === 'pmo').length;
-      if (pmoCount <= 1) {
-        return { success: false, message: 'No es posible eliminar el único usuario PMO del sistema.' };
-      }
-    }
-
-    const nextUsers = users.filter((u) => u.id !== userId);
+    const nextUsers = users.filter(
+      (u) => u.id.toLowerCase() !== cleanId && u.username.toLowerCase() !== cleanId
+    );
     this.saveUsers(nextUsers);
     return { success: true };
+  },
+
+  deleteUsers(userIds: string[]): { success: boolean; deletedCount: number } {
+    const users = this.getUsers();
+    const lowerIds = userIds.map((id) => id.trim().toLowerCase());
+    const nextUsers = users.filter((u) => {
+      const uId = u.id.toLowerCase();
+      const uUsername = u.username.toLowerCase();
+      return !lowerIds.includes(uId) && !lowerIds.includes(uUsername);
+    });
+    this.saveUsers(nextUsers);
+    return { success: true, deletedCount: users.length - nextUsers.length };
   },
 
   authenticate(

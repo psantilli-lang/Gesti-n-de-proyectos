@@ -89,13 +89,9 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
 
   const handleNotifyTeamByEmail = async () => {
     const token = getAccessToken();
-    if (!token) {
-      alert('⚠️ Para enviar notificaciones automáticas por correo, primero vinculá tu cuenta de Gmail desde el botón "Vincular Gmail" en la barra superior.');
-      return;
-    }
-
+    const appUsers = storageService.getUsers();
     const teamEmails = (project.team || [])
-      .map((m) => m.email?.trim() || emailNotificationService.resolveUserEmail(m.name, project))
+      .map((m) => m.email?.trim() || emailNotificationService.resolveUserEmail(m.name, project, appUsers))
       .filter((e): e is string => !!e);
 
     if (teamEmails.length === 0) {
@@ -110,12 +106,13 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
         project,
         accessToken: token,
         senderEmail: sender,
+        allUsers: appUsers,
       });
 
       if (log.status === 'sent') {
         showEmailStatus(`✅ Notificación enviada exitosamente a ${teamEmails.length} integrante(s) del equipo (${teamEmails.join(', ')}).`);
       } else {
-        showEmailStatus(`⚠️ Error al enviar: ${log.error || 'Verificá permisos de Gmail'}`, true);
+        showEmailStatus(`⚠️ Error al enviar: ${log.error || 'Verificá la configuración de SMTP o vinculá Gmail'}`, true);
       }
     } catch (err: any) {
       showEmailStatus(`⚠️ Error al enviar: ${err?.message || 'Fallo de conexión'}`, true);
@@ -126,12 +123,8 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
 
   const handleNotifyActionResponsible = async (action: StageAction) => {
     const token = getAccessToken();
-    if (!token) {
-      alert('⚠️ Para enviar notificaciones por correo, primero vinculá tu cuenta de Gmail desde el botón "Vincular Gmail" en la barra superior.');
-      return;
-    }
-
-    const recipient = emailNotificationService.resolveUserEmail(action.responsible, project);
+    const appUsers = storageService.getUsers();
+    const recipient = emailNotificationService.resolveUserEmail(action.responsible, project, appUsers);
     if (!recipient) {
       alert(`No se encontró un correo electrónico para "${action.responsible}". Podés asignarle su correo editando el proyecto o el responsable.`);
       return;
@@ -145,12 +138,13 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
         action,
         accessToken: token,
         senderEmail: sender,
+        allUsers: appUsers,
       });
 
       if (log.status === 'sent') {
         showEmailStatus(`✅ Notificación de la acción enviada a ${action.responsible} (${recipient}).`);
       } else {
-        showEmailStatus(`⚠️ Error al enviar: ${log.error || 'Verificá permisos de Gmail'}`, true);
+        showEmailStatus(`⚠️ Error al enviar: ${log.error || 'Verificá la configuración de SMTP o vinculá Gmail'}`, true);
       }
     } catch (err: any) {
       showEmailStatus(`⚠️ Error al enviar: ${err?.message || 'Fallo de conexión'}`, true);

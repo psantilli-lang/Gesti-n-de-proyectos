@@ -1,6 +1,7 @@
 import { SAPProject, StageAction, TeamMember, AppUser } from '../types/project';
 import { db, ensureFirebaseAuth } from './firebase';
 import { collection, doc, setDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { storageService } from './storageService';
 
 export interface NotificationLog {
   id: string;
@@ -110,8 +111,9 @@ export const emailNotificationService = {
     }
 
     // 3. Check app registered users list (supports any domain)
-    if (allUsers) {
-      const matched = allUsers.find((u) => {
+    const effectiveUsers = allUsers && allUsers.length > 0 ? allUsers : storageService.getUsers();
+    if (effectiveUsers) {
+      const matched = effectiveUsers.find((u) => {
         const uNorm = normalize(u.name || '');
         const usrNorm = (u.username || '').toLowerCase().trim();
         return (

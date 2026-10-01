@@ -11,7 +11,8 @@ import {
   AttachedFile, 
   StageSchedule,
   StageAction,
-  UserSession
+  UserSession,
+  AppUser
 } from '../types/project';
 import { storageService } from '../services/storageService';
 import { 
@@ -43,7 +44,7 @@ interface ProjectFormModalProps {
   projectToEdit?: SAPProject | null;
   existingProjects: SAPProject[];
   currentUser?: UserSession;
-  allUsers?: UserSession[];
+  allUsers?: (UserSession | AppUser)[];
   onClose: () => void;
   onSave: (project: SAPProject, options?: { openAddAction?: boolean }) => void;
 }
@@ -151,6 +152,88 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
     }
   };
 
+  // 100% of app users guaranteed (combining storageService and props)
+  const allAppUsers = React.useMemo(() => {
+    const userMap = new Map<string, { id?: string; name: string; email?: string; role?: string; username?: string }>();
+    
+    // 1. From storageService (always fresh with 100% of app users)
+    try {
+      storageService.getUsers().forEach((u) => {
+        if (u.name && u.name.trim()) {
+          userMap.set(u.name.trim().toLowerCase(), {
+            id: u.id,
+            name: u.name.trim(),
+            email: u.email?.trim() || '',
+            role: u.role,
+            username: u.username,
+          });
+        }
+      });
+    } catch {}
+
+    // 2. From allUsers prop
+    if (allUsers) {
+      allUsers.forEach((u) => {
+        if (u.name && u.name.trim()) {
+          const key = u.name.trim().toLowerCase();
+          const existing = userMap.get(key);
+          userMap.set(key, {
+            id: u.id || existing?.id,
+            name: u.name.trim(),
+            email: u.email?.trim() || existing?.email || '',
+            role: u.role || existing?.role,
+            username: u.username || existing?.username,
+          });
+        }
+      });
+    }
+
+    // 3. Current user
+    if (currentUser?.name && currentUser.name.trim()) {
+      const key = currentUser.name.trim().toLowerCase();
+      const existing = userMap.get(key);
+      userMap.set(key, {
+        id: currentUser.id || existing?.id,
+        name: currentUser.name.trim(),
+        email: currentUser.email?.trim() || existing?.email || '',
+        role: currentUser.role || existing?.role,
+        username: currentUser.username || existing?.username,
+      });
+    }
+
+    return Array.from(userMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allUsers, currentUser]);
+
+  // Options for inline action responsible person (100% of app users + team)
+  const inlineResponsibleOptions = React.useMemo(() => {
+    const map = new Map<string, { name: string; email?: string; role?: string }>();
+    
+    // 100% of app users (including Agustin Piccotto)
+    allAppUsers.forEach((u) => {
+      map.set(u.name.trim().toLowerCase(), {
+        name: u.name.trim(),
+        email: u.email,
+        role: u.role,
+      });
+    });
+
+    // Also include team members
+    team.forEach((m) => {
+      if (m.name && m.name.trim()) {
+        const key = m.name.trim().toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, {
+            name: m.name.trim(),
+            email: m.email,
+            role: m.role,
+          });
+        }
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allAppUsers, team]);
+
   // Team member manipulation
   const handleAddTeamMember = () => {
     setTeam([
@@ -159,14 +242,28 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
     ]);
   };
 
+  const handleSelectAppUserForMember = (memberId: string, selectedUser: { name: string; email?: string; role?: string }) => {
+    setTeam((prev) =>
+      prev.map((m) => {
+        if (m.id !== memberId) return m;
+        return {
+          ...m,
+          name: selectedUser.name,
+          email: selectedUser.email || '',
+          role: m.role || (selectedUser.role === 'pmo' ? 'PMO SAP' : 'Integrante'),
+        };
+      })
+    );
+  };
+
   const handleUpdateTeamMember = (id: string, field: 'name' | 'role' | 'email', val: string) => {
     setTeam(
       team.map((m) => {
         if (m.id !== id) return m;
         const updated = { ...m, [field]: val };
-        // If updating name and email is empty, check allUsers to autofill
-        if (field === 'name' && !m.email && allUsers) {
-          const match = allUsers.find(
+        // If updating name and email is empty, check allAppUsers to autofill
+        if (field === 'name' && !m.email) {
+          const match = allAppUsers.find(
             (u) => u.name.toLowerCase().trim() === val.toLowerCase().trim()
           );
           if (match?.email) {
@@ -631,43 +728,119 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
               </button>
             </div>
 
-            <div className="space-y-2">
-              {team.map((member) => (
-                <div key={member.id} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
-                  <input
-                    type="text"
-                    placeholder="Nombre y Apellido (ej: Ing. Juan Gómez)"
-                    value={member.name}
-                    onChange={(e) => handleUpdateTeamMember(member.id, 'name', e.target.value)}
-                    className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Rol (ej: Líder, Consultor SAP)"
-                    value={member.role}
-                    onChange={(e) => handleUpdateTeamMember(member.id, 'role', e.target.value)}
-                    className="w-full sm:w-44 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                  <input
-                    type="email"
-                    placeholder="Email (cualquier dominio: @gmail, @empresa, etc.)"
-                    value={member.email || ''}
-                    onChange={(e) => handleUpdateTeamMember(member.id, 'email', e.target.value)}
-                    className="w-full sm:w-56 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    title="Cualquier dirección de correo (Gmail, Outlook, corporativo) para notificaciones automáticas"
-                  />
-                  {team.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTeamMember(member.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded self-end sm:self-center cursor-pointer"
-                      title="Quitar integrante"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
+            <div className="space-y-2.5">
+              {team.map((member, idx) => {
+                const matchedUser = allAppUsers.find(
+                  (u) => u.name.trim().toLowerCase() === member.name.trim().toLowerCase()
+                );
+                const isMemberInAppUsers = !!matchedUser;
+                const isCustom = member.name.trim() !== '' && !isMemberInAppUsers;
+
+                return (
+                  <div
+                    key={member.id}
+                    className="flex flex-col gap-2 bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                      {/* Desplegable de Usuarios de la App */}
+                      <div className="sm:col-span-5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center justify-between">
+                          <span>Integrante #{idx + 1}</span>
+                          <span className="text-blue-600 font-normal">Usuario de la App</span>
+                        </label>
+                        <select
+                          value={isMemberInAppUsers ? member.name : isCustom ? '__custom__' : ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '__custom__') {
+                              if (isMemberInAppUsers) {
+                                handleUpdateTeamMember(member.id, 'name', '');
+                              }
+                            } else if (val) {
+                              const selectedUser = allAppUsers.find((u) => u.name === val);
+                              if (selectedUser) {
+                                handleSelectAppUserForMember(member.id, selectedUser);
+                              }
+                            } else {
+                              handleUpdateTeamMember(member.id, 'name', '');
+                              handleUpdateTeamMember(member.id, 'email', '');
+                            }
+                          }}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-semibold focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                        >
+                          <option value="">-- Seleccionar usuario de la app ({allAppUsers.length}) --</option>
+                          {allAppUsers.map((u) => (
+                            <option key={u.id || u.name} value={u.name}>
+                              {u.name} {u.email ? `• ${u.email}` : ''}
+                            </option>
+                          ))}
+                          <option value="__custom__">✏️ Integrante personalizado / manual...</option>
+                        </select>
+                      </div>
+
+                      {/* Rol en el proyecto */}
+                      <div className="sm:col-span-3">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                          Rol en Proyecto
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ej: Líder, Consultor SAP..."
+                          value={member.role}
+                          onChange={(e) => handleUpdateTeamMember(member.id, 'role', e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      {/* Email automático */}
+                      <div className="sm:col-span-3">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center justify-between">
+                          <span>Email Notificación</span>
+                          {member.email && isMemberInAppUsers && (
+                            <span className="text-[9px] text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded font-bold">✓ auto</span>
+                          )}
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="email@empresa.com"
+                          value={member.email || ''}
+                          onChange={(e) => handleUpdateTeamMember(member.id, 'email', e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-[11px]"
+                          title="Email para envío automático de notificaciones"
+                        />
+                      </div>
+
+                      {/* Botón eliminar fila */}
+                      <div className="sm:col-span-1 flex items-end justify-center pt-2 sm:pt-4">
+                        {team.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTeamMember(member.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                            title="Quitar integrante"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Si eligió custom o el integrante no está en los usuarios de la app, mostrar input para el nombre */}
+                    {(isCustom || (!member.name && !isMemberInAppUsers)) && (
+                      <div className="pt-1.5 border-t border-dashed border-slate-200 flex items-center gap-2">
+                        <span className="text-[11px] text-amber-700 font-semibold shrink-0">Nombre manual:</span>
+                        <input
+                          type="text"
+                          placeholder="Nombre y Apellido manual (ej: Ing. Roberto Rossi)"
+                          value={member.name}
+                          onChange={(e) => handleUpdateTeamMember(member.id, 'name', e.target.value)}
+                          className="flex-1 bg-amber-50/50 border border-amber-300 rounded-lg px-2.5 py-1 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -842,32 +1015,14 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                     <select
                       value={inlineResponsible}
                       onChange={(e) => setInlineResponsible(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
-                      {currentUser && (
-                        <option key={`current-user-${currentUser.id || currentUser.name}`} value={currentUser.name}>
-                          {currentUser.name} (Usuario Actual - {currentUser.role})
+                      <option value="">-- Seleccionar Responsable ({inlineResponsibleOptions.length} usuarios) --</option>
+                      {inlineResponsibleOptions.map((opt) => (
+                        <option key={opt.name} value={opt.name}>
+                          {opt.name} {opt.email ? `• ${opt.email}` : ''} {opt.role ? `(${opt.role})` : ''}
                         </option>
-                      )}
-                      {team
-                        .filter((m) => m.name.trim() !== '' && (!currentUser || m.name !== currentUser.name))
-                        .map((m) => (
-                          <option key={`team-${m.id}`} value={m.name}>
-                            {m.name} ({m.role})
-                          </option>
-                        ))}
-                      {allUsers &&
-                        allUsers
-                          .filter(
-                            (u) =>
-                              (!currentUser || u.name !== currentUser.name) &&
-                              !team.some((t) => t.name === u.name)
-                          )
-                          .map((u) => (
-                            <option key={`alluser-${u.id}`} value={u.name}>
-                              {u.name} ({u.role})
-                            </option>
-                          ))}
+                      ))}
                       <option key="custom-resp-option" value="__custom__">
                         + Otro responsable personalizado...
                       </option>

@@ -256,21 +256,20 @@ export const firestoreService = {
           remoteList.push({ ...data, id: docSnap.id });
         });
 
-        // Merge remote users with local users, preserving passwords and newly created local users
+        // Remote collection in Firestore is authoritative for existing users; preserve local passwords
         const localUsers = storageService.getUsers();
-        const userMap = new Map<string, AppUser>();
-        localUsers.forEach((u) => userMap.set(u.id, u));
-        remoteList.forEach((r) => {
-          const local = userMap.get(r.id);
-          userMap.set(r.id, {
-            ...r,
-            password: r.password || local?.password || (r.username === 'admin' ? 'admin' : r.username === 'pmo' ? 'pmo' : '123'),
-          });
+        const localPasswordMap = new Map<string, string>();
+        localUsers.forEach((u) => {
+          if (u.password) localPasswordMap.set(u.id, u.password);
         });
 
-        const merged = Array.from(userMap.values());
-        storageService.saveUsers(merged);
-        onData(merged);
+        const updatedList: AppUser[] = remoteList.map((r) => ({
+          ...r,
+          password: r.password || localPasswordMap.get(r.id) || (r.username === 'admin' ? 'admin' : r.username === 'pmo' ? 'pmo' : '123'),
+        }));
+
+        storageService.saveUsers(updatedList);
+        onData(updatedList);
       },
       (error) => {
         if ((error as any)?.code === 'unavailable') {
@@ -325,15 +324,67 @@ export const firestoreService = {
   },
 
   /**
-   * Delete a user in Firestore
+   * Delete a user in Firestore (direct doc and query cleanup)
    */
   async deleteUser(userId: string): Promise<void> {
     try {
       await ensureFirebaseAuth();
-      const docRef = doc(db, 'users', userId);
+      const cleanId = userId.trim();
+      const docRef = doc(db, 'users', cleanId);
       await deleteDoc(docRef);
+
+      // Clean any documents matching this userId or username
+      const snap = await getDocs(collection(db, 'users'));
+      const batch = writeBatch(db);
+      let found = false;
+      snap.forEach((d) => {
+        const data = d.data();
+        const dId = d.id.toLowerCase();
+        const docUserId = data.id ? String(data.id).toLowerCase() : '';
+        const docUsername = data.username ? String(data.username).toLowerCase() : '';
+        const targetLower = cleanId.toLowerCase();
+
+        if (dId === targetLower || docUserId === targetLower || docUsername === targetLower) {
+          batch.delete(d.ref);
+          found = true;
+        }
+      });
+      if (found) {
+        await batch.commit();
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${userId}`);
+      console.warn('Firestore delete user warning:', error);
+    }
+  },
+
+  /**
+   * Delete multiple users in Firestore in a batch
+   */
+  async deleteUsers(userIds: string[]): Promise<void> {
+    try {
+      await ensureFirebaseAuth();
+      const lowerIds = userIds.map((id) => id.trim().toLowerCase());
+      const snap = await getDocs(collection(db, 'users'));
+      const batch = writeBatch(db);
+      let count = 0;
+
+      snap.forEach((d) => {
+        const data = d.data();
+        const dId = d.id.toLowerCase();
+        const docUserId = data.id ? String(data.id).toLowerCase() : '';
+        const docUsername = data.username ? String(data.username).toLowerCase() : '';
+
+        if (lowerIds.includes(dId) || lowerIds.includes(docUserId) || lowerIds.includes(docUsername)) {
+          batch.delete(d.ref);
+          count++;
+        }
+      });
+
+      if (count > 0) {
+        await batch.commit();
+      }
+    } catch (error) {
+      console.warn('Firestore bulk delete users warning:', error);
     }
   },
 };

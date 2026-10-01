@@ -1,0 +1,441 @@
+import React from 'react';
+import { 
+  SAPProject, 
+  StageAction, 
+  UserSession, 
+  ALL_PROJECT_STATES, 
+  ProjectState, 
+  AttachedFile 
+} from '../types/project';
+import { 
+  formatDateSpanish, 
+  canUserEditAction, 
+  canUserAddAction,
+  canUserDeleteAction,
+  canUserCancelProject,
+  canUserAccessReportingAndPrioritization,
+  isActionOverdue, 
+  isActionDueSoon 
+} from '../utils/helpers';
+import { 
+  Plus, 
+  MessageSquare, 
+  ExternalLink, 
+  Paperclip, 
+  Trash2, 
+  Clock, 
+  User, 
+} from 'lucide-react';
+
+interface WeeklyReviewTableProps {
+  projects: SAPProject[];
+  currentUser: UserSession;
+  onUpdateProject: (updated: SAPProject) => void;
+  onSelectProject: (project: SAPProject) => void;
+  onOpenAddAction: (project: SAPProject) => void;
+  onOpenEditAction: (project: SAPProject, action: StageAction) => void;
+  onPreviewFile?: (file: AttachedFile, projectTitle?: string) => void;
+  onStateChange: (project: SAPProject, newState: ProjectState) => void;
+  onPriorityChange: (project: SAPProject, newPriority: number) => void;
+  onActionStatusChange: (
+    project: SAPProject,
+    action: StageAction,
+    newStatus: 'Pendiente' | 'En proceso' | 'Finalizada'
+  ) => void;
+}
+
+export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
+  projects,
+  currentUser,
+  onUpdateProject,
+  onSelectProject,
+  onOpenAddAction,
+  onOpenEditAction,
+  onPreviewFile,
+  onStateChange,
+  onPriorityChange,
+  onActionStatusChange,
+}) => {
+  const canPrioritize = canUserAccessReportingAndPrioritization(currentUser);
+
+  if (projects.length === 0) {
+    return (
+      <div className="p-8 text-center text-slate-500 bg-white rounded-xl border border-slate-200">
+        No hay proyectos que coincidan con los filtros seleccionados.
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr className="bg-slate-800 text-white font-semibold text-[11px] uppercase tracking-wider select-none">
+              {/* 1. N° Proyecto (Primera columna) */}
+              <th className="py-3 px-3 text-center w-28 border-r border-slate-700">N° Proyecto</th>
+              {/* 2. Prioridad */}
+              <th className="py-3 px-2 text-center w-16 border-r border-slate-700">Prioridad</th>
+              {/* 3. Título del Proyecto */}
+              <th className="py-3 px-3 min-w-[220px] border-r border-slate-700">Título del Proyecto</th>
+              {/* 4. Área */}
+              <th className="py-3 px-2.5 w-32 border-r border-slate-700">Área</th>
+              {/* 5. Estado Proyecto */}
+              <th className="py-3 px-2.5 min-w-[170px] border-r border-slate-700">Estado Proyecto</th>
+              {/* 6. Acción Pendiente */}
+              <th className="py-3 px-3 min-w-[240px] border-r border-slate-700">Acción Pendiente</th>
+              {/* 7. Responsable (Etapa eliminada según solicitud) */}
+              <th className="py-3 px-2.5 min-w-[130px] border-r border-slate-700">Responsable</th>
+              {/* 8. Vencimiento */}
+              <th className="py-3 px-2.5 min-w-[115px] border-r border-slate-700">Vencimiento</th>
+              {/* 9. Estado Acción */}
+              <th className="py-3 px-2.5 min-w-[140px] border-r border-slate-700">Estado Acción</th>
+              {/* 10. Comentario / Avance */}
+              <th className="py-3 px-3 min-w-[220px] border-r border-slate-700">Comentario / Avance</th>
+              {/* 11. Operaciones */}
+              <th className="py-3 px-2.5 text-center w-24">Operaciones</th>
+            </tr>
+          </thead>
+          <tbody className="text-slate-700">
+            {projects.map((project, pIndex) => {
+              // Get active (pending or in process) actions
+              const activeActions = project.actions.filter(
+                (a) => a.status === 'Pendiente' || a.status === 'En proceso'
+              );
+
+              // If project has no active actions, display 1 row with empty action columns
+              const rowsToRender = activeActions.length > 0 ? activeActions : [null];
+              const spanCount = rowsToRender.length;
+              const isEvenProject = pIndex % 2 === 0;
+              const projectBgClass = isEvenProject ? 'bg-white' : 'bg-slate-50/70';
+              const canAdd = canUserAddAction(currentUser, project);
+
+              return rowsToRender.map((action, actionIdx) => {
+                const isFirstRowOfProject = actionIdx === 0;
+                const canEditAct = action ? canUserEditAction(currentUser, action) : false;
+                const canDeleteAct = action ? canUserDeleteAction(currentUser, action, project) : false;
+                const isOverdue = action ? isActionOverdue(action) : false;
+                const isDueSoon = action ? isActionDueSoon(action) : false;
+
+                return (
+                  <tr
+                    key={action ? `${project.id}-${action.id}` : `${project.id}-empty`}
+                    className={`${projectBgClass} hover:bg-blue-50/30 transition-colors ${
+                      isFirstRowOfProject && pIndex > 0 ? 'border-t-2 border-slate-300' : 'border-t border-slate-200'
+                    }`}
+                  >
+                    {/* 1. N° Proyecto (Primera columna, concatenada / unificada con rowSpan) */}
+                    {isFirstRowOfProject && (
+                      <td 
+                        rowSpan={spanCount}
+                        className={`${projectBgClass} py-3 px-2.5 text-center border-r border-slate-200 align-top`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => onSelectProject(project)}
+                          className="inline-flex items-center gap-1 font-mono text-xs font-black text-blue-700 hover:text-blue-900 hover:underline bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded border border-blue-200 transition-colors cursor-pointer shadow-2xs"
+                          title="Hacé clic para ver la ficha técnica completa y el cronograma"
+                        >
+                          <span>{project.code}</span>
+                          <ExternalLink className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                        </button>
+                      </td>
+                    )}
+
+                    {/* 2. Prioridad (Concatenada / unificada con rowSpan) */}
+                    {isFirstRowOfProject && (
+                      <td 
+                        rowSpan={spanCount}
+                        className={`${projectBgClass} py-3 px-2 text-center border-r border-slate-200 align-top`}
+                      >
+                        <div className="flex items-center justify-center">
+                          <input
+                            type="number"
+                            min="1"
+                            max="99"
+                            disabled={!canPrioritize}
+                            value={project.priority ?? 1}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              if (!isNaN(val) && val >= 1) {
+                                onPriorityChange(project, val);
+                              }
+                            }}
+                            className={`w-11 text-center font-black text-xs rounded border py-1.5 px-0.5 focus:outline-none transition-colors ${
+                              canPrioritize
+                                ? 'text-blue-800 bg-white hover:bg-blue-50 focus:border-blue-500 border-slate-300 shadow-2xs cursor-pointer'
+                                : 'text-slate-600 bg-slate-100 border-slate-200 cursor-not-allowed opacity-80'
+                            }`}
+                            title={
+                              canPrioritize
+                                ? 'Prioridad del proyecto (PMO)'
+                                : 'Prioridad (Solo PMO)'
+                            }
+                          />
+                        </div>
+                      </td>
+                    )}
+
+                    {/* 3. Título del Proyecto (Concatenado / unificado con rowSpan) */}
+                    {isFirstRowOfProject && (
+                      <td 
+                        rowSpan={spanCount}
+                        className={`${projectBgClass} py-3 px-3 border-r border-slate-200 align-top`}
+                      >
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => onSelectProject(project)}
+                            className="font-bold text-slate-900 hover:text-blue-600 text-left leading-snug transition-colors cursor-pointer block"
+                            title="Ver detalle del proyecto"
+                          >
+                            {project.title}
+                          </button>
+                          {project.sapModules && project.sapModules.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {project.sapModules.map((m) => (
+                                <span
+                                  key={m}
+                                  className="text-[9px] px-1 py-0.2 rounded bg-slate-100 text-slate-600 font-mono border border-slate-200"
+                                >
+                                  {m}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    )}
+
+                    {/* 4. Área (Concatenada / unificada con rowSpan) */}
+                    {isFirstRowOfProject && (
+                      <td 
+                        rowSpan={spanCount}
+                        className={`${projectBgClass} py-3 px-2.5 border-r border-slate-200 align-top`}
+                      >
+                        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-white text-slate-800 border border-slate-200 whitespace-nowrap shadow-2xs">
+                          {project.area}
+                        </span>
+                      </td>
+                    )}
+
+                    {/* 5. Estado Proyecto (Concatenado / unificado con rowSpan, no se duplica) */}
+                    {isFirstRowOfProject && (
+                      <td 
+                        rowSpan={spanCount}
+                        className={`${projectBgClass} py-3 px-2.5 border-r border-slate-200 align-top`}
+                      >
+                        <select
+                          value={project.state}
+                          onChange={(e) => onStateChange(project, e.target.value as ProjectState)}
+                          className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs font-semibold text-blue-900 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs"
+                          title="Cambiar estado del proyecto"
+                        >
+                          {ALL_PROJECT_STATES.map((st) => {
+                            const isCancel = st === '8- Cancelado' || st === '08- Cancelado';
+                            const disabledOpt = isCancel && !canUserCancelProject(currentUser, project);
+                            return (
+                              <option key={st} value={st} disabled={disabledOpt}>
+                                {st} {disabledOpt ? ' (Solo PMO)' : ''}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </td>
+                    )}
+
+                    {/* 6. Acción Pendiente (o celda vacía para agregar) */}
+                    <td className="py-2.5 px-3 border-r border-slate-200 align-top">
+                      {action ? (
+                        <div className="space-y-1">
+                          <span className="font-semibold text-slate-900 block leading-tight">
+                            {action.title}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between text-slate-400 italic text-[11px] py-1">
+                          <span>— Sin acciones pendientes —</span>
+                          <button
+                            type="button"
+                            disabled={!canAdd}
+                            onClick={() => onOpenAddAction(project)}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded border transition-colors ${
+                              canAdd
+                                ? 'text-blue-700 bg-blue-50 hover:bg-blue-100 border-blue-200 cursor-pointer'
+                                : 'text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed opacity-60'
+                            }`}
+                            title={canAdd ? 'Agregar acción a este proyecto' : 'Solo miembros del proyecto o PMO'}
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Agregar</span>
+                          </button>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* 7. Responsable */}
+                    <td className="py-2.5 px-2.5 border-r border-slate-200 align-top">
+                      {action ? (
+                        <span className="inline-flex items-center gap-1 text-slate-700 font-semibold text-[11px]">
+                          <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="truncate max-w-[120px]" title={action.responsible}>
+                            {action.responsible}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+
+                    {/* 8. Vencimiento */}
+                    <td className="py-2.5 px-2.5 border-r border-slate-200 align-top">
+                      {action ? (
+                        <div
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium text-[11px] ${
+                            isOverdue
+                              ? 'bg-rose-100 text-rose-800 font-bold border border-rose-200'
+                              : isDueSoon
+                              ? 'bg-amber-100 text-amber-800 font-semibold border border-amber-200'
+                              : 'text-slate-700'
+                          }`}
+                        >
+                          <Clock className="w-3 h-3 shrink-0" />
+                          <span className="whitespace-nowrap">{formatDateSpanish(action.requiredDate)}</span>
+                          {isOverdue && <span className="text-[10px] text-rose-600 font-bold">!</span>}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+
+                    {/* 9. Estado Acción */}
+                    <td className="py-2.5 px-2.5 border-r border-slate-200 align-top">
+                      {action ? (
+                        <div className="inline-flex items-center rounded border border-slate-200 p-0.5 bg-white text-[10px] shadow-2xs">
+                          {(['Pendiente', 'En proceso', 'Finalizada'] as const).map((st) => {
+                            const isActive = action.status === st;
+                            return (
+                              <button
+                                key={st}
+                                type="button"
+                                onClick={() => onActionStatusChange(project, action, st)}
+                                disabled={!canEditAct}
+                                className={`px-1.5 py-0.5 rounded font-medium transition-all ${
+                                  isActive
+                                    ? st === 'Finalizada'
+                                      ? 'bg-emerald-600 text-white font-bold'
+                                      : st === 'En proceso'
+                                      ? 'bg-blue-600 text-white font-bold'
+                                      : 'bg-amber-500 text-white font-bold'
+                                    : canEditAct
+                                    ? 'text-slate-600 hover:bg-slate-100'
+                                    : 'text-slate-400 cursor-not-allowed opacity-60'
+                                }`}
+                                title={
+                                  canEditAct
+                                    ? `Cambiar estado a ${st}`
+                                    : `Solo ${action.responsible} o Admin pueden editar`
+                                }
+                              >
+                                {st === 'En proceso' ? 'Proceso' : st}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+
+                    {/* 10. Comentario / Avance */}
+                    <td className="py-2.5 px-3 border-r border-slate-200 align-top">
+                      {action ? (
+                        <div className="space-y-1.5">
+                          {action.executionComment ? (
+                            <p className="text-[11px] text-slate-800 italic leading-snug line-clamp-2" title={action.executionComment}>
+                              "{action.executionComment}"
+                            </p>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic block">
+                              Sin comentarios registrados.
+                            </span>
+                          )}
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => onOpenEditAction(project, action)}
+                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                            >
+                              <MessageSquare className="w-3 h-3" />
+                              <span>{canEditAct ? 'Editar Comentario' : 'Ver Comentario'}</span>
+                            </button>
+
+                            {action.attachments && action.attachments.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (onPreviewFile && action.attachments?.[0]) {
+                                    onPreviewFile(action.attachments[0], project.title);
+                                  }
+                                }}
+                                className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                                title={`${action.attachments.length} archivo(s) adjunto(s)`}
+                              >
+                                <Paperclip className="w-3 h-3 text-blue-600" />
+                                <span>{action.attachments.length}</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+
+                    {/* 11. Operaciones */}
+                    <td className="py-2.5 px-2 text-center align-top">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          disabled={!canAdd}
+                          onClick={() => onOpenAddAction(project)}
+                          className={`p-1 rounded text-blue-700 hover:bg-blue-100 transition-colors ${
+                            canAdd ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+                          }`}
+                          title="Agregar nueva acción a este proyecto"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+
+                        {action && canDeleteAct && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`¿Eliminar la acción "${action.title}"?`)) {
+                                const updatedActions = project.actions.filter((a) => a.id !== action.id);
+                                onUpdateProject({
+                                  ...project,
+                                  actions: updatedActions,
+                                  updatedAt: new Date().toISOString(),
+                                });
+                              }
+                            }}
+                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Eliminar acción"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              });
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
