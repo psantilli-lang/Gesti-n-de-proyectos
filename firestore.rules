@@ -20,5 +20,10 @@ service cloud.firestore {
     match /notificationLogs/{logId} {
       allow read, write: if true;
     }
+
+    // System configuration (SMTP, central services) - allow read and write
+    match /system_config/{configId} {
+      allow read, write: if true;
+    }
   }
 }

@@ -1,9 +1,13 @@
 import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
-import nodemailer from 'nodemailer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { 
+  createSmtpTransporter, 
+  resolveSmtpConfig, 
+  maskEmail 
+} from './api/_mailer.ts';
 
 dotenv.config();
 
@@ -17,73 +21,47 @@ const isProd = process.env.NODE_ENV === 'production';
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Helper to mask email for security
-function maskEmail(email: string): string {
-  const parts = email.split('@');
-  if (parts.length !== 2) return email;
-  const name = parts[0];
-  const domain = parts[1];
-  const maskedName = name.length > 3 ? `${name.slice(0, 3)}***` : `${name}***`;
-  return `${maskedName}@${domain}`;
-}
-
-// Helper to get or build Nodemailer transporter
-function getTransporter() {
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = parseInt(process.env.SMTP_PORT || '465', 10);
-  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
-  const user = (process.env.SMTP_USER || '').trim();
-  const pass = (process.env.SMTP_PASS || '').trim().replace(/\s+/g, ''); // Remove spaces if copied with spaces
-
-  if (!user || !pass) {
-    return null;
+// Enable CORS for all API routes
+app.use('/api', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
   }
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: {
-      user,
-      pass,
-    },
-    tls: {
-      rejectUnauthorized: false, // Prevents self-signed / enterprise proxy cert issues
-    },
-  });
-}
+  next();
+});
 
 // ================= API ROUTES =================
 
 // Health check
 app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+  res.json({ 
+    status: 'ok', 
+    time: new Date().toISOString(),
+    environment: process.env.VERCEL ? 'vercel' : 'node'
+  });
 });
 
 // Check SMTP configuration status (never leaks passwords)
 app.get('/api/mail/status', (_req: Request, res: Response) => {
-  const user = (process.env.SMTP_USER || '').trim();
-  const pass = (process.env.SMTP_PASS || '').trim();
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = parseInt(process.env.SMTP_PORT || '465', 10);
-  const from = process.env.SMTP_FROM || `Sistema SAP Crucianelli <${user || 'notificaciones@crucianelli.com'}>`;
-
-  const isConfigured = Boolean(user && pass);
+  const config = resolveSmtpConfig();
 
   res.json({
-    configured: isConfigured,
-    senderEmail: user || null,
-    maskedUser: user ? maskEmail(user) : null,
-    host,
-    port,
-    from,
+    configured: config.isConfigured,
+    senderEmail: config.user || null,
+    maskedUser: config.user ? maskEmail(config.user) : null,
+    host: config.host,
+    port: config.port,
+    from: config.from,
+    source: config.source,
   });
 });
 
 // Send email via central SMTP
 app.post('/api/mail/send', async (req: Request, res: Response) => {
   try {
-    const { to, subject, htmlBody, textBody, from } = req.body;
+    const { to, subject, htmlBody, textBody, from, smtpConfig } = req.body;
 
     if (!to || (!Array.isArray(to) && typeof to !== 'string')) {
       return res.status(400).json({ success: false, error: 'Destinatario "to" inválido o ausente.' });
@@ -93,23 +71,20 @@ app.post('/api/mail/send', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Faltan campos obligatorios: "subject" o "htmlBody".' });
     }
 
-    const transporter = getTransporter();
+    const transporter = createSmtpTransporter(smtpConfig);
     if (!transporter) {
       return res.status(503).json({
         success: false,
         error:
-          'Servidor SMTP central no configurado. Se deben definir SMTP_USER y SMTP_PASS en el entorno (.env).',
+          'Servidor SMTP central no configurado. Se deben definir SMTP_USER y SMTP_PASS en Vercel o en el entorno (.env).',
       });
     }
 
-    const defaultFrom =
-      process.env.SMTP_FROM ||
-      `Sistema SAP Crucianelli <${process.env.SMTP_USER || 'notificaciones@crucianelli.com'}>`;
-
+    const config = resolveSmtpConfig(smtpConfig);
     const recipients = Array.isArray(to) ? to.join(', ') : to;
 
     const mailOptions = {
-      from: from || defaultFrom,
+      from: from || config.from,
       to: recipients,
       subject,
       html: htmlBody,
@@ -137,25 +112,23 @@ app.post('/api/mail/send', async (req: Request, res: Response) => {
 // Send test email
 app.post('/api/mail/test', async (req: Request, res: Response) => {
   try {
-    const { to } = req.body;
+    const { to, smtpConfig } = req.body;
     if (!to || typeof to !== 'string' || !to.includes('@')) {
       return res.status(400).json({ success: false, error: 'Ingresá una dirección de correo válida para la prueba.' });
     }
 
-    const transporter = getTransporter();
+    const transporter = createSmtpTransporter(smtpConfig);
     if (!transporter) {
       return res.status(503).json({
         success: false,
-        error: 'El servidor SMTP no está configurado todavía. Verificá las variables SMTP_USER y SMTP_PASS en .env.',
+        error: 'El servidor SMTP no está configurado todavía. Verificá las variables SMTP_USER y SMTP_PASS en Vercel o en .env.',
       });
     }
 
     // Verify SMTP connection handshake first
     await transporter.verify();
 
-    const fromAddress =
-      process.env.SMTP_FROM ||
-      `Sistema SAP Crucianelli <${process.env.SMTP_USER || 'notificaciones@crucianelli.com'}>`;
+    const config = resolveSmtpConfig(smtpConfig);
 
     const testHtml = `
       <!DOCTYPE html>
@@ -172,9 +145,10 @@ app.post('/api/mail/test', async (req: Request, res: Response) => {
             </p>
             <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px 16px; margin-bottom:16px;">
               <p style="margin:0; font-size:13px; color:#166534;">
-                <strong>Buzón Remitente Central:</strong> ${process.env.SMTP_USER}<br/>
-                <strong>Servidor SMTP:</strong> ${process.env.SMTP_HOST || 'smtp.gmail.com'}:${process.env.SMTP_PORT || '465'}<br/>
-                <strong>Estado:</strong> Conectado y verificado.
+                <strong>Buzón Remitente Central:</strong> ${config.user}<br/>
+                <strong>Servidor SMTP:</strong> ${config.host}:${config.port}<br/>
+                <strong>Origen de Credenciales:</strong> ${config.source === 'env' ? 'Variables de Entorno' : 'Servidor Central'}<br/>
+                <strong>Estado:</strong> Conectado y verificado con éxito.
               </p>
             </div>
             <p style="margin:0; font-size:12px; color:#64748b;">
@@ -187,7 +161,7 @@ app.post('/api/mail/test', async (req: Request, res: Response) => {
     `;
 
     const info = await transporter.sendMail({
-      from: fromAddress,
+      from: config.from,
       to,
       subject: '✅ [Crucianelli SAP] Prueba de Servidor SMTP Central exitosa',
       html: testHtml,
@@ -197,7 +171,7 @@ app.post('/api/mail/test', async (req: Request, res: Response) => {
       success: true,
       messageId: info.messageId,
       accepted: info.accepted,
-      message: `Correo de prueba enviado con éxito a ${to} desde el buzón central.`,
+      message: `Correo de prueba enviado con éxito a ${to} desde el buzón central (${config.user}).`,
     });
   } catch (error: any) {
     console.error('SMTP test error:', error);
@@ -228,18 +202,17 @@ app.post('/api/mail/configure', async (req: Request, res: Response) => {
     const cleanPort = (port || '465').toString().trim();
 
     // Test credentials first before saving!
-    const testTransporter = nodemailer.createTransport({
+    const testTransporter = createSmtpTransporter({
       host: cleanHost,
       port: parseInt(cleanPort, 10),
       secure: cleanPort === '465',
-      auth: {
-        user: cleanUser,
-        pass: cleanPass,
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
+      user: cleanUser,
+      pass: cleanPass,
     });
+
+    if (!testTransporter) {
+      return res.status(400).json({ success: false, error: 'No se pudo inicializar el transporte SMTP.' });
+    }
 
     await testTransporter.verify();
 
@@ -251,30 +224,34 @@ app.post('/api/mail/configure', async (req: Request, res: Response) => {
     process.env.SMTP_PASS = cleanPass;
     process.env.SMTP_FROM = `Sistema SAP Crucianelli <${cleanUser}>`;
 
-    // Persist to .env safely (so it survives restarts, but never touches GitHub due to .gitignore)
-    const envPath = path.resolve(process.cwd(), '.env');
-    let envContent = '';
-    if (fs.existsSync(envPath)) {
-      envContent = fs.readFileSync(envPath, 'utf-8');
-    }
-
-    const updateEnvVar = (key: string, val: string) => {
-      const regex = new RegExp(`^${key}=.*$`, 'm');
-      if (regex.test(envContent)) {
-        envContent = envContent.replace(regex, `${key}=${val}`);
-      } else {
-        envContent += `\n${key}=${val}`;
+    // Persist to .env safely if filesystem is writable
+    try {
+      const envPath = path.resolve(process.cwd(), '.env');
+      let envContent = '';
+      if (fs.existsSync(envPath)) {
+        envContent = fs.readFileSync(envPath, 'utf-8');
       }
-    };
 
-    updateEnvVar('SMTP_HOST', cleanHost);
-    updateEnvVar('SMTP_PORT', cleanPort);
-    updateEnvVar('SMTP_SECURE', cleanPort === '465' ? 'true' : 'false');
-    updateEnvVar('SMTP_USER', cleanUser);
-    updateEnvVar('SMTP_PASS', cleanPass);
-    updateEnvVar('SMTP_FROM', `"Sistema SAP Crucianelli <${cleanUser}>"`);
+      const updateEnvVar = (key: string, val: string) => {
+        const regex = new RegExp(`^${key}=.*$`, 'm');
+        if (regex.test(envContent)) {
+          envContent = envContent.replace(regex, `${key}=${val}`);
+        } else {
+          envContent += `\n${key}=${val}`;
+        }
+      };
 
-    fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf-8');
+      updateEnvVar('SMTP_HOST', cleanHost);
+      updateEnvVar('SMTP_PORT', cleanPort);
+      updateEnvVar('SMTP_SECURE', cleanPort === '465' ? 'true' : 'false');
+      updateEnvVar('SMTP_USER', cleanUser);
+      updateEnvVar('SMTP_PASS', cleanPass);
+      updateEnvVar('SMTP_FROM', `"Sistema SAP Crucianelli <${cleanUser}>"`);
+
+      fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf-8');
+    } catch (fsErr) {
+      console.warn('Filesystem is read-only (expected in Vercel serverless environment):', fsErr);
+    }
 
     return res.json({
       success: true,
