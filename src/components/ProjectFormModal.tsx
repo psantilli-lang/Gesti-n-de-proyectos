@@ -19,7 +19,8 @@ import {
   formatFileSize, 
   canUserAccessReportingAndPrioritization, 
   canUserCancelProject, 
-  canUserEditProjectMetadata 
+  canUserEditProjectMetadata,
+  canUserEditProjectDates
 } from '../utils/helpers';
 import { 
   X, 
@@ -60,6 +61,8 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
   const isEditing = !!projectToEdit;
   const canPrioritize = canUserAccessReportingAndPrioritization(currentUser);
   const canCancel = canUserCancelProject(currentUser, projectToEdit || undefined);
+  const canEditMetadata = !projectToEdit || canUserEditProjectMetadata(currentUser, projectToEdit);
+  const canEditDates = !projectToEdit || canUserEditProjectDates(currentUser, projectToEdit);
 
   // Auto-generate code if new
   const [code, setCode] = useState<string>(() => {
@@ -281,12 +284,16 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
     }
   };
 
-  // Schedule stage date modification
+  // Schedule stage date modification (exclusive to project team members & PMO)
   const handleScheduleDateChange = (
     stageId: number,
     field: 'estimatedStartDate' | 'estimatedEndDate',
     val: string
   ) => {
+    if (!canEditDates) {
+      alert('Permiso denegado: Las fechas de los proyectos solo la pueden cambiar los miembros del equipo de proyecto.');
+      return;
+    }
     setSchedule(
       schedule.map((s) => (s.stageId === stageId ? { ...s, [field]: val } : s))
     );
@@ -379,8 +386,8 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
       return;
     }
 
-    if (projectToEdit && !canUserEditProjectMetadata(currentUser, projectToEdit)) {
-      alert('Permiso denegado: La información general del proyecto solo puede ser modificada por el PMO o por quien dio de alta el proyecto.');
+    if (projectToEdit && !canEditMetadata && !canEditDates) {
+      alert('Permiso denegado: Solo el PMO, el creador o los miembros del equipo de proyecto pueden modificar este proyecto.');
       return;
     }
 
@@ -389,28 +396,32 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
       return;
     }
 
-    const finalArea = area === '__custom__' ? customArea.trim() || 'General' : area;
+    const finalArea = (!canEditMetadata && projectToEdit)
+      ? projectToEdit.area
+      : (area === '__custom__' ? customArea.trim() || 'General' : area);
 
     const newProject: SAPProject = {
       id: projectToEdit ? projectToEdit.id : `prj-${Date.now()}`,
-      code,
+      code: projectToEdit ? projectToEdit.code : code,
       area: finalArea,
-      sapModules,
-      title: title.trim(),
-      currentSituation: currentSituation.trim(),
-      currentSituationFiles,
-      improvementNeed: improvementNeed.trim(),
-      improvementNeedFiles,
-      team: team
-        .filter((m) => m.name.trim() !== '')
-        .map((m) => ({
-          ...m,
-          name: m.name.trim(),
-          role: m.role.trim(),
-          email: m.email?.trim() || undefined,
-        })),
-      priority: Number(priority) || 1,
-      state,
+      sapModules: (!canEditMetadata && projectToEdit) ? projectToEdit.sapModules : sapModules,
+      title: (!canEditMetadata && projectToEdit) ? projectToEdit.title : title.trim(),
+      currentSituation: (!canEditMetadata && projectToEdit) ? projectToEdit.currentSituation : currentSituation.trim(),
+      currentSituationFiles: (!canEditMetadata && projectToEdit) ? projectToEdit.currentSituationFiles : currentSituationFiles,
+      improvementNeed: (!canEditMetadata && projectToEdit) ? projectToEdit.improvementNeed : improvementNeed.trim(),
+      improvementNeedFiles: (!canEditMetadata && projectToEdit) ? projectToEdit.improvementNeedFiles : improvementNeedFiles,
+      team: (!canEditMetadata && projectToEdit)
+        ? projectToEdit.team
+        : team
+            .filter((m) => m.name.trim() !== '')
+            .map((m) => ({
+              ...m,
+              name: m.name.trim(),
+              role: m.role.trim(),
+              email: m.email?.trim() || undefined,
+            })),
+      priority: (!canPrioritize && projectToEdit) ? projectToEdit.priority : (Number(priority) || 1),
+      state: (!canEditMetadata && projectToEdit) ? projectToEdit.state : state,
       schedule,
       actions,
       createdAt: projectToEdit ? projectToEdit.createdAt : new Date().toISOString(),
@@ -846,14 +857,27 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
 
           {/* Section 4: Cronograma Estimado por Etapas */}
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-            <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-blue-600" />
-                4. Cronograma Estimado de Duración por Etapa
-              </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Cargue las fechas estimadas de inicio y fin de cada una de las 6 etapas al dar de alta el proyecto:
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-blue-600" />
+                  4. Cronograma Estimado de Duración por Etapa
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Cargue las fechas estimadas de inicio y fin de cada una de las 6 etapas al dar de alta el proyecto:
+                </p>
+              </div>
+              {projectToEdit && (
+                canEditDates ? (
+                  <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-2.5 py-1 rounded-md flex items-center gap-1">
+                    ✓ Miembro del equipo (Fechas editables)
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-medium text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md flex items-center gap-1" title="Las fechas de los proyectos solo la pueden cambiar los miembros del equipo de proyecto">
+                    🔒 Fechas restringidas al equipo de proyecto
+                  </span>
+                )
+              )}
             </div>
 
             <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
@@ -878,21 +902,33 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
                       <td className="py-2 px-3">
                         <input
                           type="date"
+                          disabled={!canEditDates}
                           value={st.estimatedStartDate}
                           onChange={(e) =>
                             handleScheduleDateChange(st.stageId, 'estimatedStartDate', e.target.value)
                           }
-                          className="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs font-mono"
+                          className={`rounded px-2 py-1 text-xs font-mono border ${
+                            canEditDates
+                              ? 'bg-slate-50 border-slate-300 text-slate-800 cursor-pointer focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500'
+                              : 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed opacity-80'
+                          }`}
+                          title={canEditDates ? 'Fecha estimada de inicio' : 'Solo los miembros del equipo de proyecto pueden cambiar fechas'}
                         />
                       </td>
                       <td className="py-2 px-3">
                         <input
                           type="date"
+                          disabled={!canEditDates}
                           value={st.estimatedEndDate}
                           onChange={(e) =>
                             handleScheduleDateChange(st.stageId, 'estimatedEndDate', e.target.value)
                           }
-                          className="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs font-mono"
+                          className={`rounded px-2 py-1 text-xs font-mono border ${
+                            canEditDates
+                              ? 'bg-slate-50 border-slate-300 text-slate-800 cursor-pointer focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500'
+                              : 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed opacity-80'
+                          }`}
+                          title={canEditDates ? 'Fecha estimada de fin' : 'Solo los miembros del equipo de proyecto pueden cambiar fechas'}
                         />
                       </td>
                     </tr>

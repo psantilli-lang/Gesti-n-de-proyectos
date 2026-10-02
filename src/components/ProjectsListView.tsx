@@ -10,8 +10,10 @@ import {
 import { storageService } from '../services/storageService';
 import { 
   canUserEditProjectMetadata, 
+  canUserEditProjectDates,
   canUserDeleteProject,
   canUserCancelProject,
+  isUserProjectCreator,
   isPMO,
   formatDateSpanish 
 } from '../utils/helpers';
@@ -439,14 +441,16 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
                   </button>
 
                   <div className="flex items-center gap-1">
-                    {canUserEditProjectMetadata(currentUser, project) && (
+                    {(canUserEditProjectMetadata(currentUser, project) || canUserEditProjectDates(currentUser, project)) && (
                       <button
                         onClick={() => onEditProject(project)}
-                        className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200"
+                        className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200 cursor-pointer shadow-2xs"
                         title={
                           isPMO(currentUser)
                             ? 'Editar datos del proyecto (PMO)'
-                            : 'Editar información general (Proyecto dado de alta por ti)'
+                            : isUserProjectCreator(currentUser, project)
+                            ? 'Editar información general (Proyecto dado de alta por ti)'
+                            : 'Editar cronograma de fechas (Miembro del equipo)'
                         }
                       >
                         <Edit3 className="w-3.5 h-3.5" />
@@ -610,14 +614,16 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
                           >
                             Ver Ficha
                           </button>
-                          {canUserEditProjectMetadata(currentUser, project) && (
+                          {(canUserEditProjectMetadata(currentUser, project) || canUserEditProjectDates(currentUser, project)) && (
                             <button
                               onClick={() => onEditProject(project)}
-                              className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors"
+                              className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors cursor-pointer"
                               title={
                                 isPMO(currentUser)
                                   ? 'Editar datos (PMO)'
-                                  : 'Editar datos (Proyecto dado de alta por ti)'
+                                  : isUserProjectCreator(currentUser, project)
+                                  ? 'Editar datos (Proyecto dado de alta por ti)'
+                                  : 'Editar cronograma de fechas (Miembro del equipo)'
                               }
                             >
                               <Edit3 className="w-3.5 h-3.5" />

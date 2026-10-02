@@ -312,8 +312,8 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Google Sheets Direct Open & Sync Controls */}
-            {onOpenGoogleSheetsSync && (
+            {/* Google Sheets Direct Open & Sync Controls - Exclusively for PMO / Admin */}
+            {currentUser && isPMO(currentUser) && onOpenGoogleSheetsSync && (
               <div className="flex items-center rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100/80 transition-colors shadow-2xs overflow-hidden">
                 <button
                   type="button"

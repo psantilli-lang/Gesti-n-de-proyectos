@@ -406,15 +406,17 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              const updatedActions = project.actions.filter((a) => a.id !== action.id);
-                              onUpdateProject({
-                                ...project,
-                                actions: updatedActions,
-                                updatedAt: new Date().toISOString(),
-                              });
+                              if (window.confirm(`¿Está seguro de eliminar la acción "${action.title}"? Esta acción solo puede ser eliminada por el PMO.`)) {
+                                const updatedActions = project.actions.filter((a) => a.id !== action.id);
+                                onUpdateProject({
+                                  ...project,
+                                  actions: updatedActions,
+                                  updatedAt: new Date().toISOString(),
+                                });
+                              }
                             }}
                             className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                            title="Eliminar acción"
+                            title="Eliminar acción (Solo PMO)"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>

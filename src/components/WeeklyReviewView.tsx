@@ -787,7 +787,9 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
           </h3>
           <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
             {projects.length === 0
-              ? 'Se han eliminado todos los proyectos viejos de prueba. Ahora podés cargar la lista oficial de los 74 proyectos desde el botón "Google Sheets" en la barra superior o subir un archivo CSV.'
+              ? isPMO(currentUser)
+                ? 'Se han eliminado todos los proyectos viejos de prueba. Ahora podés cargar la lista oficial de los 74 proyectos desde el botón "Google Sheets" en la barra superior o subir un archivo CSV.'
+                : 'No hay proyectos cargados en el sistema en este momento.'
               : 'No hay proyectos que coincidan con la combinación de filtros seleccionada.'}
           </p>
           {hasActiveFilters && (
@@ -1296,7 +1298,7 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
                                       {canDeleteAct && (
                                         <button
                                           onClick={() => {
-                                            if (window.confirm(`¿Está seguro de eliminar la acción "${action.title}"? Solo el PMO o quien dio de alta el proyecto pueden eliminarla.`)) {
+                                            if (window.confirm(`¿Está seguro de eliminar la acción "${action.title}"? Esta acción solo puede ser eliminada por el PMO.`)) {
                                               const updatedActions = project.actions.filter((a) => a.id !== action.id);
                                               onUpdateProject({
                                                 ...project,
@@ -1305,8 +1307,8 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
                                               });
                                             }
                                           }}
-                                          className="px-2 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded text-[11px] font-medium transition-colors flex items-center gap-1 border border-transparent hover:border-rose-200"
-                                          title="Eliminar acción (Solo PMO o quien dio de alta el proyecto)"
+                                          className="px-2 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded text-[11px] font-medium transition-colors flex items-center gap-1 border border-transparent hover:border-rose-200 cursor-pointer shadow-2xs"
+                                          title="Eliminar acción (Solo PMO)"
                                         >
                                           <Trash2 className="w-3.5 h-3.5" />
                                           <span>Eliminar</span>

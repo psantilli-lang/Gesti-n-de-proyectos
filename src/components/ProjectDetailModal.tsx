@@ -15,6 +15,7 @@ import {
   formatFileSize, 
   canUserEditAction, 
   canUserEditProjectMetadata, 
+  canUserEditProjectDates,
   canUserAddAction,
   canUserDeleteAction,
   canUserCancelProject,
@@ -74,6 +75,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
 
   const health = storageService.getProjectHealth(project);
   const canEditMetadata = canUserEditProjectMetadata(currentUser, project);
+  const canEditDates = canUserEditProjectDates(currentUser, project);
   const canCancel = canUserCancelProject(currentUser, project);
   const canAddAction = canUserAddAction(currentUser, project);
   const canPrioritize = canUserAccessReportingAndPrioritization(currentUser);
@@ -171,8 +173,39 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
     });
   };
 
-  // Register real actual end date for a stage
+  // Update stage estimated start or end date (exclusive to project team members & PMO)
+  const handleUpdateStageScheduleDate = (
+    stageId: number,
+    field: 'estimatedStartDate' | 'estimatedEndDate',
+    val: string
+  ) => {
+    if (!canEditDates) {
+      alert('Permiso denegado: Las fechas de los proyectos solo la pueden cambiar los miembros del equipo de proyecto.');
+      return;
+    }
+    const updatedSchedule = project.schedule.map((st) => {
+      if (st.stageId === stageId) {
+        return {
+          ...st,
+          [field]: val,
+        };
+      }
+      return st;
+    });
+
+    onUpdateProject({
+      ...project,
+      schedule: updatedSchedule,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  // Register real actual end date for a stage (exclusive to project team members & PMO)
   const handleSetActualEndDate = (stageId: number, dateStr: string) => {
+    if (!canEditDates) {
+      alert('Permiso denegado: Las fechas de los proyectos solo la pueden cambiar los miembros del equipo de proyecto.');
+      return;
+    }
     const updatedSchedule = project.schedule.map((st) => {
       if (st.stageId === stageId) {
         return {
@@ -452,6 +485,17 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {canEditDates ? (
+                    <span className="px-2.5 py-1 rounded-md bg-emerald-100/90 border border-emerald-300 font-bold text-emerald-900 flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5 text-emerald-700" />
+                      Equipo del proyecto (Fechas editables)
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 font-medium text-slate-500 flex items-center gap-1.5" title="Las fechas de los proyectos solo la pueden cambiar los miembros del equipo de proyecto">
+                      <ShieldAlert className="w-3.5 h-3.5 text-slate-400" />
+                      Fechas restringidas al equipo
+                    </span>
+                  )}
                   <span className="px-2.5 py-1 rounded-md bg-white border border-blue-200 font-bold text-blue-800">
                     {project.schedule.filter((s) => s.status === 'Completada').length} de 7 completadas
                   </span>
@@ -501,36 +545,79 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                                 </span>
                               )}
                             </td>
-                            <td className="py-3 px-4 text-slate-600 font-mono">
-                              {formatDateSpanish(stage.estimatedStartDate)}
+                            <td className="py-3 px-4 font-mono">
+                              {canEditDates ? (
+                                <input
+                                  type="date"
+                                  value={stage.estimatedStartDate || ''}
+                                  onChange={(e) =>
+                                    handleUpdateStageScheduleDate(
+                                      stage.stageId,
+                                      'estimatedStartDate',
+                                      e.target.value
+                                    )
+                                  }
+                                  className="bg-white border border-slate-300 hover:border-blue-400 focus:border-blue-500 rounded px-2 py-1 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono shadow-2xs cursor-pointer"
+                                  title="Modificar fecha de inicio estimada (Miembro del equipo)"
+                                />
+                              ) : (
+                                <span className="text-slate-600" title="Solo los miembros del equipo de proyecto pueden cambiar fechas">
+                                  {formatDateSpanish(stage.estimatedStartDate)}
+                                </span>
+                              )}
                             </td>
-                            <td className="py-3 px-4 text-slate-600 font-mono">
-                              {formatDateSpanish(stage.estimatedEndDate)}
+                            <td className="py-3 px-4 font-mono">
+                              {canEditDates ? (
+                                <input
+                                  type="date"
+                                  value={stage.estimatedEndDate || ''}
+                                  onChange={(e) =>
+                                    handleUpdateStageScheduleDate(
+                                      stage.stageId,
+                                      'estimatedEndDate',
+                                      e.target.value
+                                    )
+                                  }
+                                  className="bg-white border border-slate-300 hover:border-blue-400 focus:border-blue-500 rounded px-2 py-1 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono shadow-2xs cursor-pointer"
+                                  title="Modificar fecha de fin estimada (Miembro del equipo)"
+                                />
+                              ) : (
+                                <span className="text-slate-600" title="Solo los miembros del equipo de proyecto pueden cambiar fechas">
+                                  {formatDateSpanish(stage.estimatedEndDate)}
+                                </span>
+                              )}
                             </td>
                             <td className="py-3 px-4">
                               {/* Actual End Date picker / button */}
-                              <div className="flex items-center gap-1.5">
-                                <input
-                                  type="date"
-                                  value={stage.actualEndDate || ''}
-                                  onChange={(e) => handleSetActualEndDate(stage.stageId, e.target.value)}
-                                  className="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                                />
-                                {!stage.actualEndDate && (
-                                  <button
-                                    onClick={() =>
-                                      handleSetActualEndDate(
-                                        stage.stageId,
-                                        new Date().toISOString().split('T')[0]
-                                      )
-                                    }
-                                    title="Marcar completada hoy"
-                                    className="px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded text-[11px] font-semibold border border-emerald-200 transition-colors whitespace-nowrap"
-                                  >
-                                    Hoy
-                                  </button>
-                                )}
-                              </div>
+                              {canEditDates ? (
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="date"
+                                    value={stage.actualEndDate || ''}
+                                    onChange={(e) => handleSetActualEndDate(stage.stageId, e.target.value)}
+                                    className="bg-white border border-slate-300 hover:border-blue-400 focus:border-blue-500 rounded px-2 py-1 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono shadow-2xs cursor-pointer"
+                                    title="Registrar fecha real de finalización"
+                                  />
+                                  {!stage.actualEndDate && (
+                                    <button
+                                      onClick={() =>
+                                        handleSetActualEndDate(
+                                          stage.stageId,
+                                          new Date().toISOString().split('T')[0]
+                                        )
+                                      }
+                                      title="Marcar completada hoy"
+                                      className="px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded text-[11px] font-semibold border border-emerald-200 transition-colors whitespace-nowrap cursor-pointer"
+                                    >
+                                      Hoy
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-600 font-mono text-xs">
+                                  {stage.actualEndDate ? formatDateSpanish(stage.actualEndDate) : '— Sin registrar —'}
+                                </span>
+                              )}
                             </td>
                             <td className="py-3 px-4">
                               {/* Deviation indicator */}
@@ -796,7 +883,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                             {canDeleteAct && (
                               <button
                                 onClick={() => {
-                                  if (window.confirm(`¿Está seguro de eliminar la acción "${action.title}"? Solo el PMO o quien dio de alta el proyecto pueden eliminarla.`)) {
+                                  if (window.confirm(`¿Está seguro de eliminar la acción "${action.title}"? Esta acción solo puede ser eliminada por el PMO.`)) {
                                     const updatedActions = project.actions.filter((a) => a.id !== action.id);
                                     onUpdateProject({
                                       ...project,
@@ -805,8 +892,8 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                                     });
                                   }
                                 }}
-                                className="px-2.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200 flex items-center gap-1 text-[11px] font-medium"
-                                title="Eliminar acción (Solo PMO o quien dio de alta el proyecto)"
+                                className="px-2.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200 flex items-center gap-1 text-[11px] font-medium cursor-pointer shadow-2xs"
+                                title="Eliminar acción (Solo PMO)"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                                 <span>Eliminar Acción</span>

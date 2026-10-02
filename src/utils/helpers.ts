@@ -70,17 +70,34 @@ export function isUserProjectMember(user?: UserSession | null, project?: SAPProj
   if (!user || !project) return false;
   if (isPMO(user)) return true;
   if (isUserProjectCreator(user, project)) return true;
-  if (!user.name) return false;
 
-  const cleanUser = cleanPersonName(user.name);
-  const uLower = user.name.toLowerCase();
+  const userEmail = user.email?.trim().toLowerCase();
+  const userName = user.name?.trim() || '';
+  const cleanUser = cleanPersonName(userName);
+  const uLower = userName.toLowerCase();
+  const username = user.username?.trim().toLowerCase();
 
   return (project.team || []).some((member) => {
-    if (!member?.name) return false;
-    const cleanMem = cleanPersonName(member.name);
-    const mLower = member.name.toLowerCase();
-    if (cleanUser.length > 2 && (cleanMem.includes(cleanUser) || cleanUser.includes(cleanMem))) return true;
-    return uLower.includes(mLower) || mLower.includes(uLower);
+    if (!member) return false;
+    // Check by email
+    if (userEmail && member.email && member.email.trim().toLowerCase() === userEmail) {
+      return true;
+    }
+    // Check by name
+    if (member.name) {
+      const cleanMem = cleanPersonName(member.name);
+      const mLower = member.name.trim().toLowerCase();
+      if (cleanUser && cleanMem && (cleanMem === cleanUser || cleanMem.includes(cleanUser) || cleanUser.includes(cleanMem))) {
+        return true;
+      }
+      if (uLower && mLower && (uLower === mLower || uLower.includes(mLower) || mLower.includes(uLower))) {
+        return true;
+      }
+      if (username && mLower.includes(username)) {
+        return true;
+      }
+    }
+    return false;
   });
 }
 
@@ -176,7 +193,7 @@ export function canUserAddAction(user?: UserSession | null, project?: SAPProject
 
 /**
  * Check if user can delete an action.
- * Rule: No pueden eliminar acciones (solo el PMO o quien creó el proyecto).
+ * Rule: Los usuarios comunes no pueden borrar acciones, solo el PMO.
  */
 export function canUserDeleteAction(
   user?: UserSession | null,
@@ -184,9 +201,21 @@ export function canUserDeleteAction(
   project?: SAPProject | null
 ): boolean {
   if (!user || !action) return false;
+  return isPMO(user);
+}
+
+/**
+ * Check if user can edit project dates (schedule stage dates, actual end dates).
+ * Rule: Las fechas de los proyectos solo la pueden cambiar los miembros del equipo de proyecto (y el PMO).
+ */
+export function canUserEditProjectDates(
+  user?: UserSession | null,
+  project?: SAPProject | null
+): boolean {
+  if (!user) return false;
+  if (!project) return true; // New project creation
   if (isPMO(user)) return true;
-  if (project && isUserProjectCreator(user, project)) return true;
-  return false;
+  return isUserProjectMember(user, project);
 }
 
 /**

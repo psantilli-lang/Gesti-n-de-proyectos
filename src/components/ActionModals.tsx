@@ -936,27 +936,21 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
           {/* Footer controls */}
           <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
             <div>
-              {onDeleteAction && (
-                canDelete ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm(`¿Está seguro de eliminar la acción "${action.title}"? Solo el PMO o quien dio de alta el proyecto pueden eliminarla.`)) {
-                        onDeleteAction(action.id);
-                        onClose();
-                      }
-                    }}
-                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
-                    title="Eliminar acción (Solo PMO o creador del proyecto)"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Eliminar Acción</span>
-                  </button>
-                ) : (
-                  <span className="text-[10px] text-slate-400 italic">
-                    Borrado restringido al PMO o quien dio de alta el proyecto
-                  </span>
-                )
+              {onDeleteAction && canDelete && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`¿Está seguro de eliminar la acción "${action.title}"? Esta acción solo puede ser eliminada por el PMO.`)) {
+                      onDeleteAction(action.id);
+                      onClose();
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  title="Eliminar acción (Solo PMO)"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Eliminar Acción</span>
+                </button>
               )}
             </div>
 

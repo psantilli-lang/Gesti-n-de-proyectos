@@ -494,6 +494,10 @@ export default function App() {
   };
 
   const handleDeleteAction = (actionId: string) => {
+    if (!currentUser || !isPMO(currentUser)) {
+      alert('Permiso denegado: Los usuarios comunes no pueden borrar acciones, solo el PMO.');
+      return;
+    }
     if (!actionModalState.project) return;
     const project = actionModalState.project;
     const updatedActions = project.actions.filter((a) => a.id !== actionId);
@@ -551,7 +555,7 @@ export default function App() {
           setIsProjectFormOpen(true);
         }}
         onResetData={handleResetData}
-        onOpenGoogleSheetsSync={() => setIsSheetsModalOpen(true)}
+        onOpenGoogleSheetsSync={currentUser && isPMO(currentUser) ? () => setIsSheetsModalOpen(true) : undefined}
         sheetsSyncInfo={sheetsSyncState}
         totalProjects={projects.length}
         pendingActionsCount={pendingActionsCount}
@@ -699,8 +703,8 @@ export default function App() {
         />
       )}
 
-      {/* MODAL: Google Sheets Sync Modal */}
-      {isSheetsModalOpen && (
+      {/* MODAL: Google Sheets Sync Modal - Exclusively for PMO */}
+      {isSheetsModalOpen && currentUser && isPMO(currentUser) && (
         <GoogleSheetsSyncModal
           projects={projects}
           isOpen={isSheetsModalOpen}
