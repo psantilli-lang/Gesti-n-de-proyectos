@@ -1,4 +1,4 @@
-import { sendJson, handleCors } from './_mailer.ts';
+import { sendJson, handleCors } from './_mailer';
 
 export default async function handler(req: any, res: any) {
   if (handleCors(req, res)) return;

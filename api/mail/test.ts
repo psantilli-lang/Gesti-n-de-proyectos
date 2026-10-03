@@ -1,4 +1,4 @@
-import { createSmtpTransporter, resolveSmtpConfig, parseJsonBody, sendJson, handleCors } from '../_mailer.ts';
+import { sendMailWithResilience, resolveSmtpConfig, parseJsonBody, sendJson, handleCors } from '../_mailer';
 
 export default async function handler(req: any, res: any) {
   if (handleCors(req, res)) return;
@@ -15,18 +15,13 @@ export default async function handler(req: any, res: any) {
       return sendJson(res, 400, { success: false, error: 'Ingresá una dirección de correo válida para la prueba.' });
     }
 
-    const transporter = createSmtpTransporter(smtpConfig);
-    if (!transporter) {
+    const config = resolveSmtpConfig(smtpConfig);
+    if (!config.isConfigured || !config.user || !config.pass) {
       return sendJson(res, 503, {
         success: false,
         error: 'El servidor SMTP no está configurado todavía. Verificá las variables SMTP_USER y SMTP_PASS en Vercel o en el entorno (.env).',
       });
     }
-
-    // Verify SMTP connection handshake
-    await transporter.verify();
-
-    const config = resolveSmtpConfig(smtpConfig);
 
     const testHtml = `
       <!DOCTYPE html>
@@ -46,7 +41,7 @@ export default async function handler(req: any, res: any) {
                 <strong>Buzón Remitente Central:</strong> ${config.user}<br/>
                 <strong>Servidor SMTP:</strong> ${config.host}:${config.port}<br/>
                 <strong>Modo:</strong> ${config.source === 'env' ? 'Variables de Entorno' : 'Servidor Central'}<br/>
-                <strong>Estado:</strong> Conectado y verificado con éxito.
+                <strong>Estado:</strong> Conectado y verificado con éxito con tolerancia a fallos multi-puerto (465 SSL / 587 STARTTLS).
               </p>
             </div>
             <p style="margin:0; font-size:12px; color:#64748b;">
@@ -58,12 +53,15 @@ export default async function handler(req: any, res: any) {
       </html>
     `;
 
-    const info = await transporter.sendMail({
-      from: config.from,
-      to,
-      subject: '✅ [Crucianelli SAP] Prueba de Servidor SMTP Central exitosa',
-      html: testHtml,
-    });
+    const info = await sendMailWithResilience(
+      {
+        from: config.from,
+        to,
+        subject: '✅ [Crucianelli SAP] Prueba de Servidor SMTP Central exitosa',
+        html: testHtml,
+      },
+      smtpConfig
+    );
 
     return sendJson(res, 200, {
       success: true,

@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
-import { maskEmail, parseJsonBody, sendJson, handleCors } from '../_mailer.ts';
+import { maskEmail, parseJsonBody, sendJson, handleCors } from '../_mailer';
 
 export default async function handler(req: any, res: any) {
   if (handleCors(req, res)) return;

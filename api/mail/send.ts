@@ -1,4 +1,4 @@
-import { createSmtpTransporter, resolveSmtpConfig, parseJsonBody, sendJson, handleCors } from '../_mailer.ts';
+import { sendMailWithResilience, resolveSmtpConfig, parseJsonBody, sendJson, handleCors } from '../_mailer';
 
 export default async function handler(req: any, res: any) {
   if (handleCors(req, res)) return;
@@ -19,15 +19,14 @@ export default async function handler(req: any, res: any) {
       return sendJson(res, 400, { success: false, error: 'Faltan campos obligatorios: "subject" o "htmlBody".' });
     }
 
-    const transporter = createSmtpTransporter(smtpConfig);
-    if (!transporter) {
+    const config = resolveSmtpConfig(smtpConfig);
+    if (!config.isConfigured || !config.user || !config.pass) {
       return sendJson(res, 503, {
         success: false,
         error: 'Servidor SMTP central no configurado. Se deben definir SMTP_USER y SMTP_PASS en Vercel o en el entorno (.env).',
       });
     }
 
-    const config = resolveSmtpConfig(smtpConfig);
     const recipients = Array.isArray(to) ? to.join(', ') : to;
 
     const mailOptions = {
@@ -38,7 +37,7 @@ export default async function handler(req: any, res: any) {
       text: textBody || htmlBody.replace(/<[^>]+>/g, ' '),
     };
 
-    const info = await transporter.sendMail(mailOptions);
+    const info = await sendMailWithResilience(mailOptions, smtpConfig);
 
     return sendJson(res, 200, {
       success: true,

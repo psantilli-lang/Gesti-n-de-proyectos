@@ -4,10 +4,11 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { 
+  sendMailWithResilience, 
   createSmtpTransporter, 
   resolveSmtpConfig, 
   maskEmail 
-} from './api/_mailer.ts';
+} from './api/_mailer';
 
 dotenv.config();
 
@@ -71,8 +72,8 @@ app.post('/api/mail/send', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Faltan campos obligatorios: "subject" o "htmlBody".' });
     }
 
-    const transporter = createSmtpTransporter(smtpConfig);
-    if (!transporter) {
+    const config = resolveSmtpConfig(smtpConfig);
+    if (!config.isConfigured || !config.user || !config.pass) {
       return res.status(503).json({
         success: false,
         error:
@@ -80,7 +81,6 @@ app.post('/api/mail/send', async (req: Request, res: Response) => {
       });
     }
 
-    const config = resolveSmtpConfig(smtpConfig);
     const recipients = Array.isArray(to) ? to.join(', ') : to;
 
     const mailOptions = {
@@ -91,7 +91,7 @@ app.post('/api/mail/send', async (req: Request, res: Response) => {
       text: textBody || htmlBody.replace(/<[^>]+>/g, ' '),
     };
 
-    const info = await transporter.sendMail(mailOptions);
+    const info = await sendMailWithResilience(mailOptions, smtpConfig);
 
     return res.json({
       success: true,
@@ -117,18 +117,13 @@ app.post('/api/mail/test', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Ingresá una dirección de correo válida para la prueba.' });
     }
 
-    const transporter = createSmtpTransporter(smtpConfig);
-    if (!transporter) {
+    const config = resolveSmtpConfig(smtpConfig);
+    if (!config.isConfigured || !config.user || !config.pass) {
       return res.status(503).json({
         success: false,
         error: 'El servidor SMTP no está configurado todavía. Verificá las variables SMTP_USER y SMTP_PASS en Vercel o en .env.',
       });
     }
-
-    // Verify SMTP connection handshake first
-    await transporter.verify();
-
-    const config = resolveSmtpConfig(smtpConfig);
 
     const testHtml = `
       <!DOCTYPE html>
@@ -148,7 +143,7 @@ app.post('/api/mail/test', async (req: Request, res: Response) => {
                 <strong>Buzón Remitente Central:</strong> ${config.user}<br/>
                 <strong>Servidor SMTP:</strong> ${config.host}:${config.port}<br/>
                 <strong>Origen de Credenciales:</strong> ${config.source === 'env' ? 'Variables de Entorno' : 'Servidor Central'}<br/>
-                <strong>Estado:</strong> Conectado y verificado con éxito.
+                <strong>Estado:</strong> Conectado y verificado con éxito con tolerancia a fallos multi-puerto (465 SSL / 587 STARTTLS).
               </p>
             </div>
             <p style="margin:0; font-size:12px; color:#64748b;">
@@ -160,12 +155,15 @@ app.post('/api/mail/test', async (req: Request, res: Response) => {
       </html>
     `;
 
-    const info = await transporter.sendMail({
-      from: config.from,
-      to,
-      subject: '✅ [Crucianelli SAP] Prueba de Servidor SMTP Central exitosa',
-      html: testHtml,
-    });
+    const info = await sendMailWithResilience(
+      {
+        from: config.from,
+        to,
+        subject: '✅ [Crucianelli SAP] Prueba de Servidor SMTP Central exitosa',
+        html: testHtml,
+      },
+      smtpConfig
+    );
 
     return res.json({
       success: true,

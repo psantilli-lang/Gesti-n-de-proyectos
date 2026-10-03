@@ -563,7 +563,12 @@ export const emailNotificationService = {
     try {
       const res = await fetch('/api/mail/status');
       if (res.ok) {
-        return await res.json();
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch {
+          // not valid json
+        }
       }
     } catch {
       // server route may not be ready
@@ -591,7 +596,19 @@ export const emailNotificationService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to, subject, htmlBody, from }),
       });
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        return {
+          success: false,
+          error:
+            res.status === 504
+              ? 'Tiempo de espera agotado en Vercel (504 Gateway Timeout). Verificá las credenciales SMTP en Vercel.'
+              : `Error del servidor (${res.status}): ${rawText.slice(0, 150)}`,
+        };
+      }
       if (!res.ok || !data.success) {
         return { success: false, error: data.error || 'Error en servidor SMTP central.' };
       }
@@ -611,7 +628,19 @@ export const emailNotificationService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to }),
       });
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        return {
+          success: false,
+          error:
+            res.status === 504
+              ? 'Tiempo de espera agotado en Vercel (504 Gateway Timeout). Verificá que la contraseña de aplicación de Gmail esté activa.'
+              : `Error del servidor (${res.status}): ${rawText.slice(0, 150)}`,
+        };
+      }
       if (!res.ok || !data.success) {
         return { success: false, error: data.error || 'Error al verificar SMTP con Gmail.' };
       }
@@ -641,7 +670,16 @@ export const emailNotificationService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user, pass, host, port }),
       });
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        return {
+          success: false,
+          error: `Error del servidor (${res.status}): ${rawText.slice(0, 150)}`,
+        };
+      }
       if (!res.ok || !data.success) {
         return { success: false, error: data.error || 'Error al configurar credenciales SMTP.' };
       }

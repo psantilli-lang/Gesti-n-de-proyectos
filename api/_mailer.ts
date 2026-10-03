@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import nodemailer, { type SendMailOptions, type SentMessageInfo } from 'nodemailer';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
@@ -87,30 +87,101 @@ export function maskEmail(email: string): string {
   return `${maskedName}@${domain}`;
 }
 
-export function createSmtpTransporter(overrideConfig?: SmtpConfig) {
+export function createSmtpTransporter(overrideConfig?: SmtpConfig, customPort?: number, customSecure?: boolean) {
   const config = resolveSmtpConfig(overrideConfig);
   if (!config.isConfigured || !config.user || !config.pass) {
     return null;
   }
 
+  const port = customPort !== undefined ? customPort : config.port;
+  const secure = customSecure !== undefined ? customSecure : (port === 465);
+
   return nodemailer.createTransport({
     host: config.host,
-    port: config.port,
-    secure: config.secure,
+    port,
+    secure,
+    requireTLS: !secure, // Enforce STARTTLS encryption when connecting via port 587
     auth: {
       user: config.user,
       pass: config.pass,
     },
+    // Serverless-optimized timeouts to prevent hanging Vercel invocations
+    connectionTimeout: 8000, // 8s timeout to establish TCP connection
+    greetingTimeout: 8000,   // 8s timeout for SMTP greeting
+    socketTimeout: 12000,    // 12s socket timeout
     tls: {
       rejectUnauthorized: false, // Prevents certificate mismatches in corporate / proxy environments
     },
   });
 }
 
+/**
+ * Robust email dispatcher with automatic port fallback (465 SSL <-> 587 STARTTLS)
+ * This solves Vercel / serverless IP network filtering issues with Gmail SMTP.
+ */
+export async function sendMailWithResilience(
+  mailOptions: SendMailOptions,
+  smtpConfig?: SmtpConfig
+): Promise<SentMessageInfo> {
+  const config = resolveSmtpConfig(smtpConfig);
+  if (!config.isConfigured || !config.user || !config.pass) {
+    throw new Error('Servidor SMTP central no configurado. Se deben definir credenciales activas.');
+  }
+
+  const primaryPort = config.port || 465;
+  const primarySecure = primaryPort === 465;
+  const fallbackPort = primaryPort === 465 ? 587 : 465;
+  const fallbackSecure = fallbackPort === 465;
+
+  let primaryError: any = null;
+
+  // 1. Try Primary Port (with timeouts)
+  try {
+    const primaryTransporter = createSmtpTransporter(smtpConfig, primaryPort, primarySecure);
+    if (!primaryTransporter) {
+      throw new Error('No se pudo inicializar transporte SMTP primario.');
+    }
+    const info = await primaryTransporter.sendMail(mailOptions);
+    return info;
+  } catch (err: any) {
+    primaryError = err;
+    console.warn(`Primary SMTP transport (port ${primaryPort}) failed on Vercel: ${err.message}. Retrying on fallback port ${fallbackPort}...`);
+  }
+
+  // 2. Fallback Port (e.g. 587 STARTTLS if 465 failed, or vice versa)
+  try {
+    const fallbackTransporter = createSmtpTransporter(smtpConfig, fallbackPort, fallbackSecure);
+    if (!fallbackTransporter) {
+      throw primaryError;
+    }
+    const fallbackInfo = await fallbackTransporter.sendMail(mailOptions);
+    console.info(`SMTP fallback transport (port ${fallbackPort}) succeeded.`);
+    return fallbackInfo;
+  } catch (fallbackErr: any) {
+    console.error(`Fallback SMTP transport (port ${fallbackPort}) also failed:`, fallbackErr.message);
+    const msg = `Fallo de envío SMTP (puerto ${primaryPort}: ${primaryError?.message || 'timeout'} | puerto ${fallbackPort}: ${fallbackErr.message})`;
+    const combinedError = new Error(msg);
+    (combinedError as any).code = fallbackErr.code || primaryError?.code;
+    throw combinedError;
+  }
+}
+
 export async function parseJsonBody(req: any): Promise<any> {
+  // 1. If req.body is already a Buffer
+  if (Buffer.isBuffer(req.body)) {
+    try {
+      return JSON.parse(req.body.toString('utf-8'));
+    } catch {
+      return {};
+    }
+  }
+
+  // 2. If req.body is already a parsed object
   if (req.body && typeof req.body === 'object') {
     return req.body;
   }
+
+  // 3. If req.body is a string
   if (typeof req.body === 'string') {
     try {
       return JSON.parse(req.body);
@@ -119,12 +190,21 @@ export async function parseJsonBody(req: any): Promise<any> {
     }
   }
 
+  // 4. If stream has already ended or completed, do not hang
+  if (req.readableEnded || req.complete) {
+    return {};
+  }
+
+  // 5. Read stream with safety timeout (max 3 seconds so it never hangs serverless)
   return new Promise((resolve) => {
     let data = '';
+    const timer = setTimeout(() => resolve({}), 3000);
+
     req.on('data', (chunk: any) => {
       data += chunk;
     });
     req.on('end', () => {
+      clearTimeout(timer);
       if (!data) return resolve({});
       try {
         resolve(JSON.parse(data));
@@ -132,7 +212,10 @@ export async function parseJsonBody(req: any): Promise<any> {
         resolve({});
       }
     });
-    req.on('error', () => resolve({}));
+    req.on('error', () => {
+      clearTimeout(timer);
+      resolve({});
+    });
   });
 }
 
