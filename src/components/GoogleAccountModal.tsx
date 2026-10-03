@@ -144,9 +144,17 @@ export const GoogleAccountModal: React.FC<GoogleAccountModalProps> = ({
     setTestResult(null);
 
     try {
+      const activeConfig = smtpUser && smtpPass ? {
+        user: smtpUser.trim(),
+        pass: smtpPass.trim().replace(/\s+/g, ''),
+        host: smtpHost.trim(),
+        port: parseInt(smtpPort, 10),
+      } : undefined;
+
       const res = await emailNotificationService.sendTestEmail({
         to: target,
-        senderEmail: smtpStatus.senderEmail || connectedEmail || undefined,
+        senderEmail: smtpStatus.senderEmail || smtpUser || connectedEmail || undefined,
+        smtpConfig: activeConfig,
       });
 
       if (res.success) {

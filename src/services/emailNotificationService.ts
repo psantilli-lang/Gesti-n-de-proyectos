@@ -621,12 +621,15 @@ export const emailNotificationService = {
   /**
    * Send a test email via the central backend SMTP server
    */
-  async sendSmtpTestEmail(to: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  async sendSmtpTestEmail(
+    to: string,
+    smtpConfig?: { user?: string; pass?: string; host?: string; port?: number }
+  ): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
       const res = await fetch('/api/mail/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to }),
+        body: JSON.stringify({ to, smtpConfig }),
       });
       const rawText = await res.text();
       let data: any = null;
@@ -958,16 +961,17 @@ export const emailNotificationService = {
     to,
     accessToken,
     senderEmail,
+    smtpConfig,
   }: {
     to: string;
     accessToken?: string | null;
     senderEmail?: string;
+    smtpConfig?: { user?: string; pass?: string; host?: string; port?: number };
   }): Promise<{ success: boolean; error?: string; channel?: 'smtp' | 'gmail_api' }> {
-    // 1. If backend central SMTP is configured, test SMTP directly
-    const smtpStatus = await this.checkSmtpStatus();
-    if (smtpStatus.configured) {
-      const smtpRes = await this.sendSmtpTestEmail(to);
-      return { success: smtpRes.success, error: smtpRes.error, channel: 'smtp' };
+    // 1. First try central backend SMTP directly
+    const smtpRes = await this.sendSmtpTestEmail(to, smtpConfig);
+    if (smtpRes.success) {
+      return { success: true, channel: 'smtp' };
     }
 
     // 2. Fallback to Gmail OAuth if active
@@ -1012,7 +1016,7 @@ export const emailNotificationService = {
 
     return {
       success: false,
-      error: 'El servidor SMTP no está configurado en .env (se requieren SMTP_USER y SMTP_PASS).',
+      error: smtpRes.error || 'El servidor SMTP no está configurado (se requieren SMTP_USER y SMTP_PASS).',
     };
   },
 };
