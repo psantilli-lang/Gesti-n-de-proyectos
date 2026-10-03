@@ -1,7 +1,4 @@
-import nodemailer from 'nodemailer';
-import fs from 'fs';
-import path from 'path';
-import { maskEmail, parseJsonBody, sendJson, handleCors } from '../_mailer';
+import { maskEmail, parseJsonBody, sendJson, handleCors, createSmtpTransporter } from '../_mailer';
 
 export default async function handler(req: any, res: any) {
   if (handleCors(req, res)) return;
@@ -28,64 +25,62 @@ export default async function handler(req: any, res: any) {
     const cleanUser = user.trim().toLowerCase();
     const cleanPass = pass.trim().replace(/\s+/g, '');
     const cleanHost = (host || 'smtp.gmail.com').trim();
-    const cleanPort = (port || '465').toString().trim();
+    const cleanPort = Number(port) || 465;
 
-    // Test credentials first before saving
-    const testTransporter = nodemailer.createTransport({
+    // Verify credentials with timeout & multi-port resilience
+    const primaryTransporter = createSmtpTransporter({
+      user: cleanUser,
+      pass: cleanPass,
       host: cleanHost,
-      port: parseInt(cleanPort, 10),
-      secure: cleanPort === '465',
-      auth: {
+      port: cleanPort,
+    }, cleanPort, cleanPort === 465);
+
+    let verified = false;
+    let verifyError: any = null;
+
+    if (primaryTransporter) {
+      try {
+        await primaryTransporter.verify();
+        verified = true;
+      } catch (err: any) {
+        verifyError = err;
+        console.warn(`Primary verify failed on port ${cleanPort}: ${err.message}. Trying alternate port...`);
+      }
+    }
+
+    // Try alternate port if primary failed
+    if (!verified) {
+      const altPort = cleanPort === 465 ? 587 : 465;
+      const altTransporter = createSmtpTransporter({
         user: cleanUser,
         pass: cleanPass,
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-    });
+        host: cleanHost,
+        port: altPort,
+      }, altPort, altPort === 465);
 
-    await testTransporter.verify();
+      if (altTransporter) {
+        try {
+          await altTransporter.verify();
+          verified = true;
+        } catch (altErr: any) {
+          throw new Error(
+            verifyError?.message || altErr?.message || 'No se pudo verificar la conexión SMTP con Gmail.'
+          );
+        }
+      }
+    }
 
-    // Update current process environment
+    // Update process.env in memory for current container
     process.env.SMTP_HOST = cleanHost;
-    process.env.SMTP_PORT = cleanPort;
-    process.env.SMTP_SECURE = cleanPort === '465' ? 'true' : 'false';
+    process.env.SMTP_PORT = String(cleanPort);
+    process.env.SMTP_SECURE = cleanPort === 465 ? 'true' : 'false';
     process.env.SMTP_USER = cleanUser;
     process.env.SMTP_PASS = cleanPass;
     process.env.SMTP_FROM = `Sistema SAP Crucianelli <${cleanUser}>`;
 
-    // Persist to .env safely if filesystem is writable (catch read-only FS on Vercel gracefully)
-    try {
-      const envPath = path.resolve(process.cwd(), '.env');
-      let envContent = '';
-      if (fs.existsSync(envPath)) {
-        envContent = fs.readFileSync(envPath, 'utf-8');
-      }
-
-      const updateEnvVar = (key: string, val: string) => {
-        const regex = new RegExp(`^${key}=.*$`, 'm');
-        if (regex.test(envContent)) {
-          envContent = envContent.replace(regex, `${key}=${val}`);
-        } else {
-          envContent += `\n${key}=${val}`;
-        }
-      };
-
-      updateEnvVar('SMTP_HOST', cleanHost);
-      updateEnvVar('SMTP_PORT', cleanPort);
-      updateEnvVar('SMTP_SECURE', cleanPort === '465' ? 'true' : 'false');
-      updateEnvVar('SMTP_USER', cleanUser);
-      updateEnvVar('SMTP_PASS', cleanPass);
-      updateEnvVar('SMTP_FROM', `"Sistema SAP Crucianelli <${cleanUser}>"`);
-
-      fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf-8');
-    } catch (fsErr) {
-      console.warn('Filesystem is read-only (expected in Vercel serverless environment):', fsErr);
-    }
-
     return sendJson(res, 200, {
       success: true,
-      message: `Servidor SMTP configurado y verificado exitosamente con la cuenta ${cleanUser}.`,
+      message: `Servidor SMTP verificado exitosamente con la cuenta ${cleanUser}.`,
       senderEmail: cleanUser,
       maskedUser: maskEmail(cleanUser),
     });
