@@ -1,4 +1,4 @@
-import { maskEmail, parseJsonBody, sendJson, handleCors, createSmtpTransporter } from '../_mailer';
+import { maskEmail, parseJsonBody, sendJson, handleCors, createSmtpTransporter } from '../_mailer.js';
 
 export default async function handler(req: any, res: any) {
   if (handleCors(req, res)) return;

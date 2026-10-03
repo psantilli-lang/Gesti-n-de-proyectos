@@ -1,4 +1,4 @@
-import { sendMailWithResilience, resolveSmtpConfig, parseJsonBody, sendJson, handleCors } from '../_mailer';
+import { sendMailWithResilience, resolveSmtpConfig, parseJsonBody, sendJson, handleCors } from '../_mailer.js';
 
 export default async function handler(req: any, res: any) {
   if (handleCors(req, res)) return;

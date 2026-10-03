@@ -8,7 +8,7 @@ import {
   createSmtpTransporter, 
   resolveSmtpConfig, 
   maskEmail 
-} from './api/_mailer';
+} from './api/_mailer.js';
 
 dotenv.config();
 
