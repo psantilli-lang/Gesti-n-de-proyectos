@@ -84,20 +84,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
       onLoginSuccess(authResult.user);
     } catch (err: any) {
-      console.error('Google Sign-In Error:', err);
       if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
-        if (err?.code === 'auth/unauthorized-domain') {
+        if (err?.code === 'auth/popup-blocked') {
+          console.warn('Google Sign-In popup blocked by browser');
+          setErrorMsg(
+            'La ventana emergente de Google fue bloqueada por el navegador. Por favor permití los popups en la barra de direcciones de tu navegador e intentá nuevamente con el botón de Google.'
+          );
+        } else if (err?.code === 'auth/unauthorized-domain') {
+          console.error('Google Sign-In Error:', err);
           const currentDomain = window.location.hostname;
           setErrorMsg(
             `El dominio "${currentDomain}" no está habilitado en Firebase para Google OAuth. ` +
             `Para habilitarlo en Vercel, agregalo en Firebase Console > Authentication > Settings > Authorized domains. ` +
             `Mientras tanto, podés ingresar directamente con tu Usuario y Contraseña asignados por el PMO.`
           );
-        } else if (err?.code === 'auth/popup-blocked') {
-          setErrorMsg(
-            'La ventana emergente de Google fue bloqueada por el navegador. Por favor permití los popups en la barra de direcciones e intentá nuevamente.'
-          );
         } else {
+          console.error('Google Sign-In Error:', err);
           setErrorMsg(err.message || 'Error al autenticarse con la cuenta de Google.');
         }
       }

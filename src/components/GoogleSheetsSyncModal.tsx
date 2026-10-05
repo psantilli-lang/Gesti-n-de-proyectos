@@ -18,7 +18,9 @@ import {
   Check,
   LogIn,
   Trash2,
-  RotateCcw
+  RotateCcw,
+  Edit3,
+  Link2
 } from 'lucide-react';
 import { SAPProject } from '../types/project';
 import {
@@ -26,6 +28,9 @@ import {
   GoogleSheetsSyncConfig,
   SHEETS_COLUMNS,
   DEFAULT_SPREADSHEET_ID,
+  DEFAULT_SPREADSHEET_URL,
+  DEFAULT_SPREADSHEET_TITLE,
+  extractSpreadsheetId,
   parseCSVText,
   parseSpreadsheetRowsToProjects,
 } from '../services/googleSheetsSyncService';
@@ -76,13 +81,25 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
     text: string;
   } | null>(null);
 
+  // Spreadsheet URL configuration state
+  const [isEditingSpreadsheet, setIsEditingSpreadsheet] = useState<boolean>(false);
+  const [spreadsheetInput, setSpreadsheetInput] = useState<string>(() => {
+    const cfg = googleSheetsSyncService.getConfig();
+    return cfg.spreadsheetUrl || cfg.spreadsheetId || DEFAULT_SPREADSHEET_URL;
+  });
+
+  // Modal to confirm project wiping
+  const [showConfirmDeleteModal, setShowConfirmDeleteModal] = useState<boolean>(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
 
-    setConfig(googleSheetsSyncService.getConfig());
+    const currentCfg = googleSheetsSyncService.getConfig();
+    setConfig(currentCfg);
+    setSpreadsheetInput(currentCfg.spreadsheetUrl || currentCfg.spreadsheetId || DEFAULT_SPREADSHEET_URL);
     setAccessToken(getAccessToken());
     setGoogleUser(getCurrentGoogleUser());
 
@@ -117,13 +134,29 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
       });
       return res.accessToken;
     } catch (err: any) {
-      console.error('Sign in error:', err);
+      if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+        return null;
+      }
+      const isPopupBlocked = err?.code === 'auth/popup-blocked' || err?.message?.includes('popup-blocked');
       const isUnauthorizedDomain = err?.code === 'auth/unauthorized-domain';
+
+      let message = err?.message || 'No se pudo completar el inicio de sesión con Google.';
+      if (isPopupBlocked) {
+        message =
+          'La ventana emergente de inicio de sesión fue bloqueada por el navegador. Permití las ventanas emergentes (popups) en la barra de direcciones de tu navegador y hacé clic en "Reintentar conexión con Google".';
+      } else if (isUnauthorizedDomain) {
+        message = `El dominio "${window.location.hostname}" debe ser agregado en Firebase Console (Authentication > Settings > Authorized domains). Podés usar la importación por archivo CSV en esta misma pantalla mientras tanto.`;
+      }
+
+      if (!isPopupBlocked) {
+        console.error('Sign in error:', err);
+      } else {
+        console.warn('Google Sign in popup blocked notice:', err);
+      }
+
       setSyncStatusMsg({
         type: 'error',
-        text: isUnauthorizedDomain
-          ? `El dominio "${window.location.hostname}" debe ser agregado en Firebase Console (Authentication > Settings > Authorized domains). Podés usar la importación por archivo CSV en esta misma pantalla mientras tanto.`
-          : err?.message || 'No se pudo completar el inicio de sesión con Google.',
+        text: message,
       });
       return null;
     } finally {
@@ -145,9 +178,58 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
     setConfig(updated);
   };
 
+  const handleSaveSpreadsheetConfig = () => {
+    const raw = spreadsheetInput.trim();
+    if (!raw) return;
+
+    const extractedId = extractSpreadsheetId(raw);
+    if (!extractedId) {
+      setSyncStatusMsg({
+        type: 'error',
+        text: 'La URL o ID de Google Sheets ingresado no es válido.',
+      });
+      return;
+    }
+
+    const newUrl = raw.startsWith('http')
+      ? raw
+      : `https://docs.google.com/spreadsheets/d/${extractedId}/edit`;
+
+    const updated = googleSheetsSyncService.saveConfig({
+      spreadsheetId: extractedId,
+      spreadsheetUrl: newUrl,
+      lastError: null,
+    });
+
+    setConfig(updated);
+    setIsEditingSpreadsheet(false);
+    setAvailableSheets([]);
+    setSyncStatusMsg({
+      type: 'success',
+      text: `Planilla configurada: ID "${extractedId}". Ya podés cargar sus datos.`,
+    });
+  };
+
+  const handleResetToDefaultSpreadsheet = () => {
+    const updated = googleSheetsSyncService.saveConfig({
+      spreadsheetId: DEFAULT_SPREADSHEET_ID,
+      spreadsheetUrl: DEFAULT_SPREADSHEET_URL,
+      title: DEFAULT_SPREADSHEET_TITLE,
+      lastError: null,
+    });
+    setConfig(updated);
+    setSpreadsheetInput(DEFAULT_SPREADSHEET_URL);
+    setIsEditingSpreadsheet(false);
+    setAvailableSheets([]);
+    setSyncStatusMsg({
+      type: 'success',
+      text: 'Planilla restablecida a la URL oficial predeterminada de Crucianelli.',
+    });
+  };
+
   /**
    * Imports all projects directly from Crucianelli Google Sheet
-   * Handles expired tokens automatically and scans all tabs to locate the 74 projects
+   * Handles expired tokens cleanly and avoids popup blocking
    */
   const handleImportFromSheets = async (targetTitle?: string | React.MouseEvent) => {
     setIsImporting(true);
@@ -162,12 +244,9 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
 
     try {
       let token = accessToken || getAccessToken();
-      const isValid = await validateGoogleToken(token);
 
-      // If token is missing, corrupted or expired, prompt Google Sign-in to get a fresh OAuth token
-      if (!token || !isValid) {
-        clearStoredToken();
-        setAccessToken(null);
+      // If user is not yet authenticated, trigger sign-in directly on this click tick
+      if (!token) {
         token = await handleSignIn();
         if (!token) {
           setIsImporting(false);
@@ -181,25 +260,23 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
       try {
         result = await googleSheetsSyncService.importProjectsFromSpreadsheet(spreadsheetId, token, safeTitle);
       } catch (firstErr: any) {
-        // If 401 unauthenticated or stale token yielded empty data, clear token and prompt sign in popup once to retry
+        // If 401 unauthenticated or session expired, notify cleanly with direct reconnect action
         if (
-          firstErr?.message?.includes('401') || 
-          firstErr?.message?.includes('UNAUTHENTICATED') || 
+          firstErr?.message?.includes('401') ||
+          firstErr?.message?.includes('UNAUTHENTICATED') ||
           firstErr?.message?.includes('expirada') ||
-          firstErr?.message?.includes('invalid authentication') ||
-          firstErr?.message?.includes('No se encontraron filas con datos')
+          firstErr?.message?.includes('invalid authentication')
         ) {
-          console.warn('Google Sheets token expired or invalid (401). Prompting for fresh Google login...');
           clearStoredToken();
           setAccessToken(null);
-          token = await handleSignIn();
-          if (!token) {
-            throw new Error('La sesión de Google expiró. Por favor iniciá sesión nuevamente para acceder a la planilla.');
-          }
-          result = await googleSheetsSyncService.importProjectsFromSpreadsheet(spreadsheetId, token, safeTitle);
-        } else {
-          throw firstErr;
+          setSyncStatusMsg({
+            type: 'error',
+            text: 'Tu sesión de Google ha expirado. Por favor hacé clic en "Conectar / Renovar cuenta Google" abajo para reautenticarte y continuar.',
+          });
+          setIsImporting(false);
+          return;
         }
+        throw firstErr;
       }
 
       if (!result.projects || result.projects.length === 0) {
@@ -238,19 +315,31 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
   };
 
   /**
-   * Deletes all existing projects from Firestore and localStorage (wiping test data)
+   * Deletes all existing projects from Firestore and localStorage (wiping test data cleanly)
    */
   const handleDeleteAllProjects = async () => {
     setIsImporting(true);
     setSyncStatusMsg(null);
     try {
+      // 1. Safety backup of current projects before wipe
+      storageService.backupProjects();
+
+      // 2. Clear Firestore collection
       await firestoreService.deleteAllProjects();
+
+      // 3. Clear local storage projects
+      storageService.clearAllProjects();
+      storageService.saveProjects([]);
+
+      // 4. Update parent view state
       if (onProjectsImported) {
         onProjectsImported([]);
       }
+
+      setShowConfirmDeleteModal(false);
       setSyncStatusMsg({
         type: 'success',
-        text: '¡Proyectos viejos eliminados correctamente! La base de datos ha quedado limpia para la importación oficial.',
+        text: '¡Base de datos limpiada con éxito! Se han borrado todos los proyectos de prueba (0 proyectos actuales). Ya podés cargar tus proyectos reales desde Google Sheets o subiendo tu archivo CSV.',
       });
     } catch (err: any) {
       console.error('Error deleting projects:', err);
@@ -530,7 +619,7 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
             </div>
           )}
 
-          {/* 1. HERO SECTION: CARGAR / IMPORTAR PLANILLA OFICIAL (74 PROYECTOS) */}
+          {/* 1. HERO SECTION: CARGAR / IMPORTAR PLANILLA OFICIAL */}
           <div className="p-4 rounded-xl border-2 border-emerald-500/60 bg-gradient-to-br from-emerald-50 via-teal-50/40 to-white space-y-3.5 shadow-xs">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -552,11 +641,74 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
                   target="_blank"
                   rel="noopener noreferrer"
                   className="shrink-0 p-1.5 rounded-lg text-emerald-700 hover:bg-emerald-100 transition-colors inline-flex items-center gap-1 text-[11px] font-semibold"
-                  title="Abrir hoja de cálculo de Crucianelli"
+                  title="Abrir hoja de cálculo de Google"
                 >
                   <span>Abrir planilla</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
+              )}
+            </div>
+
+            {/* URL / Spreadsheet ID Configuration Toggle */}
+            <div className="p-3 bg-white/90 rounded-xl border border-emerald-200/80 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-slate-700 text-[11px] flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Planilla vinculada:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingSpreadsheet(!isEditingSpreadsheet)}
+                  className="text-emerald-700 hover:text-emerald-800 font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <Edit3 className="w-3 h-3" />
+                  <span>{isEditingSpreadsheet ? 'Ocultar' : 'Cambiar planilla / URL'}</span>
+                </button>
+              </div>
+
+              {isEditingSpreadsheet ? (
+                <div className="space-y-2 pt-1 border-t border-emerald-100">
+                  <p className="text-[10px] text-slate-500">
+                    Pegá el enlace completo de tu Google Sheet (ej. <code>https://docs.google.com/spreadsheets/d/.../edit</code>) o su ID:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={spreadsheetInput}
+                      onChange={(e) => setSpreadsheetInput(e.target.value)}
+                      placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+                      className="flex-1 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-mono focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveSpreadsheetConfig}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-2xs transition-colors cursor-pointer"
+                    >
+                      Guardar
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <button
+                      type="button"
+                      onClick={handleResetToDefaultSpreadsheet}
+                      className="text-slate-500 hover:text-emerald-700 underline cursor-pointer"
+                    >
+                      Restablecer planilla por defecto
+                    </button>
+                    <span className="text-slate-400 font-mono">
+                      ID: {extractSpreadsheetId(spreadsheetInput) || 'Sin ID'}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between text-[11px] text-slate-600">
+                  <span className="font-mono text-[10px] truncate max-w-[320px]" title={config.spreadsheetUrl || config.spreadsheetId || ''}>
+                    {config.spreadsheetUrl || config.spreadsheetId || 'Sin configurar'}
+                  </span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full shrink-0">
+                    Activa
+                  </span>
+                </div>
               )}
             </div>
 
@@ -611,7 +763,7 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
                   title="Restaura la copia de seguridad guardada previamente en este navegador"
                 >
                   <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
-                  <span>Restaurar copia de seguridad local ({storageService.getProjects().length > 0 ? 'Recuperar' : 'Restaurar proyectos previos'})</span>
+                  <span>Restaurar copia de seguridad previa ({storageService.getProjects().length > 0 ? 'Recuperar' : 'Restaurar proyectos previos'})</span>
                 </button>
               </div>
             )}
@@ -643,6 +795,33 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* 1.2 LIMPIEZA DE DATOS DE PRUEBA (PARA EMPEZAR CON PROYECTOS REALES) */}
+          <div className="p-3.5 rounded-xl border border-rose-200 bg-rose-50/40 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                Limpieza de Base de Datos para Carga Oficial
+              </span>
+              <span className="text-[10px] text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full font-bold">
+                {projects.length} {projects.length === 1 ? 'proyecto' : 'proyectos'} actuales
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600 leading-normal">
+              Si querés borrar los proyectos de prueba previos para cargar los proyectos reales en los que estás trabajando, podés vaciar la base de datos con un clic. Se guardará un respaldo previo de seguridad.
+            </p>
+            <div className="pt-1 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setShowConfirmDeleteModal(true)}
+                disabled={isImporting || projects.length === 0}
+                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Vaciar proyectos de prueba ({projects.length})</span>
+              </button>
+            </div>
           </div>
 
           {/* 1.5 RESPALDO FÍSICO Y SEGURIDAD TOTAL (GARANTÍA CONTRA PÉRDIDAS) */}
@@ -870,6 +1049,48 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Modal de confirmación para vaciar proyectos de prueba */}
+        {showConfirmDeleteModal && (
+          <div className="fixed inset-0 z-60 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">Vaciar proyectos de prueba</h4>
+                  <p className="text-[11px] text-slate-500">Preparación para carga real</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                ¿Estás seguro de que deseás eliminar los <strong>{projects.length}</strong> proyectos de prueba actuales?
+                Esta acción vaciará la base de datos para que puedas iniciar la carga limpia de tus proyectos reales. Se guardará una copia de respaldo automática antes de borrar.
+              </p>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmDeleteModal(false)}
+                  disabled={isImporting}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteAllProjects}
+                  disabled={isImporting}
+                  className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{isImporting ? 'Vaciando...' : 'Sí, vaciar base de datos'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

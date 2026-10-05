@@ -80,13 +80,13 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
               {/* 5. Estado Proyecto */}
               <th className="py-2.5 px-2 w-[128px] border-r border-slate-700">Estado Proy.</th>
               {/* 6. Acción Pendiente */}
-              <th className="py-2.5 px-2.5 w-[20%] min-w-[140px] border-r border-slate-700">Acción Pendiente</th>
+              <th className="py-2.5 px-2 w-[17%] min-w-[125px] border-r border-slate-700">Acción Pendiente</th>
               {/* 7. Responsable */}
               <th className="py-2.5 px-2 w-[105px] border-r border-slate-700">Responsable</th>
               {/* 8. Vencimiento */}
               <th className="py-2.5 px-1.5 text-center w-[82px] border-r border-slate-700">Vencimiento</th>
               {/* 9. Estado Acción */}
-              <th className="py-2.5 px-1.5 text-center w-[108px] border-r border-slate-700">Estado Acción</th>
+              <th className="py-2.5 px-2 text-center w-[130px] min-w-[126px] border-r border-slate-700">Estado Acción</th>
               {/* 10. Comentario / Avance */}
               <th className="py-2.5 px-2.5 w-[17%] min-w-[130px] border-r border-slate-700">Comentario / Avance</th>
               {/* 11. Operaciones */}
@@ -307,13 +307,13 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     </td>
 
                     {/* 9. Estado Acción (Desplegable para evitar clics accidentales) */}
-                    <td className="py-2 px-1.5 text-center border-r border-slate-200 align-top">
+                    <td className="py-2 px-2 text-center border-r border-slate-200 align-top">
                       {action ? (
                         <select
                           value={action.status}
                           disabled={!canEditAct}
                           onChange={(e) => onActionStatusChange(project, action, e.target.value as ActionStatus)}
-                          className={`w-full text-[11px] font-bold rounded px-1.5 py-1 border shadow-2xs cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                          className={`w-full text-[11px] font-bold rounded px-2 py-1 border shadow-2xs cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                             action.status === 'Finalizada'
                               ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
                               : action.status === 'En proceso'

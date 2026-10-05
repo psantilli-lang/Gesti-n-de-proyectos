@@ -394,7 +394,10 @@ export default function App() {
 
   const handleClearAllProjects = async () => {
     try {
+      storageService.backupProjects();
       await firestoreService.deleteAllProjects();
+      storageService.clearAllProjects();
+      storageService.saveProjects([]);
       setProjects([]);
       setSelectedProjectForDetail(null);
       setIsClearModalOpen(false);

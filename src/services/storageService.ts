@@ -135,16 +135,20 @@ export const storageService = {
         // Check legacy key
         data = localStorage.getItem(LEGACY_STORAGE_KEY);
       }
-      if (data) {
+      if (data !== null) {
         const parsed: SAPProject[] = JSON.parse(data);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
+          // If intentionally emptied by the user, respect the empty database
+          if (parsed.length === 0) {
+            return [];
+          }
           const migrated = parsed.map(migrateProject);
           this.saveProjects(migrated);
           return migrated;
         }
       }
 
-      // If empty in primary, attempt recovery from safety backup
+      // If key was not found, attempt recovery from safety backup
       const backupData = localStorage.getItem(BACKUP_STORAGE_KEY);
       if (backupData) {
         try {
@@ -161,7 +165,7 @@ export const storageService = {
     } catch (e) {
       console.error('Error loading projects from localStorage', e);
     }
-    // Initialize default
+    // Initialize default only on first clean installation
     this.saveProjects(INITIAL_PROJECTS);
     return INITIAL_PROJECTS;
   },
@@ -189,6 +193,17 @@ export const storageService = {
       // ignore
     }
     return false;
+  },
+
+  backupProjects(): void {
+    try {
+      const current = this.getProjects();
+      if (Array.isArray(current) && current.length > 0) {
+        localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(current));
+      }
+    } catch (e) {
+      console.error('Error creating projects backup', e);
+    }
   },
 
   restoreBackup(): SAPProject[] {

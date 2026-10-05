@@ -42,8 +42,19 @@ export const db = firestoreInstance;
 
 // Authenticate via Google Sign-In with Firebase Auth
 export async function signInWithGoogleFirebase(): Promise<FirebaseUser> {
-  const result = await signInWithPopup(auth, googleProvider);
-  return result.user;
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    return result.user;
+  } catch (err: any) {
+    if (err?.code === 'auth/popup-blocked') {
+      const friendlyErr = new Error(
+        'La ventana emergente de Google fue bloqueada por el navegador. Permití las ventanas emergentes en la barra de direcciones de tu navegador e intentá nuevamente.'
+      );
+      (friendlyErr as any).code = 'auth/popup-blocked';
+      throw friendlyErr;
+    }
+    throw err;
+  }
 }
 
 // Sign out from Firebase Auth

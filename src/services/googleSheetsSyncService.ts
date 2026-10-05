@@ -41,6 +41,19 @@ export const SHEETS_COLUMNS = [
 ];
 
 /**
+ * Extracts a Google Spreadsheet ID from either a full URL or a raw ID string.
+ */
+export function extractSpreadsheetId(urlOrId: string): string {
+  if (!urlOrId || !urlOrId.trim()) return '';
+  const trimmed = urlOrId.trim();
+  const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (match && match[1]) {
+    return match[1];
+  }
+  return trimmed.split('/')[0].split('?')[0].trim();
+}
+
+/**
  * Parses raw CSV text into a 2D array of strings, respecting quotes, multiline cells, and delimiters.
  */
 export function parseCSVText(csvText: string): string[][] {
@@ -745,13 +758,15 @@ export class GoogleSheetsSyncService {
 
             if (rows.length >= 2) {
               const parsedProjects = parseSpreadsheetRowsToProjects(rows);
-              evaluatedSheets.push({
-                sheetId: sId,
-                title: sTitle,
-                rowCount: Math.max(0, rows.length - 1),
-                projectCount: parsedProjects.length,
-                projects: parsedProjects,
-              });
+              if (parsedProjects.length > 0) {
+                evaluatedSheets.push({
+                  sheetId: sId,
+                  title: sTitle,
+                  rowCount: Math.max(0, rows.length - 1),
+                  projectCount: parsedProjects.length,
+                  projects: parsedProjects,
+                });
+              }
             }
           }
           if (evaluatedSheets.length > 0) {
@@ -776,6 +791,8 @@ export class GoogleSheetsSyncService {
           const safeTitle = sTitle.replace(/'/g, "''");
 
           const candidateRanges = [
+            `'${safeTitle}'`,
+            `${sTitle}`,
             buildSheetRange(s.properties),
             `'${safeTitle}'!A1:Z2000`,
             `'${safeTitle}'!A:Z`,
@@ -803,7 +820,7 @@ export class GoogleSheetsSyncService {
 
               if (valuesRes.ok) {
                 const valuesData = await valuesRes.json();
-                if (valuesData.values && valuesData.values.length >= 2) {
+                if (valuesData.values && valuesData.values.length >= 1) {
                   rows = valuesData.values;
                   break; // Successful range fetch
                 }
@@ -815,15 +832,17 @@ export class GoogleSheetsSyncService {
             }
           }
 
-          if (rows.length >= 2) {
+          if (rows.length >= 1) {
             const parsedProjects = parseSpreadsheetRowsToProjects(rows);
-            evaluatedSheets.push({
-              sheetId: sId,
-              title: sTitle,
-              rowCount: Math.max(0, rows.length - 1),
-              projectCount: parsedProjects.length,
-              projects: parsedProjects,
-            });
+            if (parsedProjects.length > 0) {
+              evaluatedSheets.push({
+                sheetId: sId,
+                title: sTitle,
+                rowCount: Math.max(0, rows.length - 1),
+                projectCount: parsedProjects.length,
+                projects: parsedProjects,
+              });
+            }
           }
         }
       }
@@ -831,7 +850,8 @@ export class GoogleSheetsSyncService {
       if (evaluatedSheets.length === 0) {
         const checkedNames = rawSheets.map((s: any) => `"${s.properties?.title || 'Hoja'}"`).join(', ');
         throw new Error(
-          `No se encontraron filas con datos para importar en ninguna de las pestañas revisadas (${checkedNames}). Verificá que la planilla contenga encabezados y filas de proyectos.`
+          `No se encontraron filas con datos de proyectos para importar en ninguna de las pestañas revisadas (${checkedNames}). ` +
+          `Verificá que la planilla contenga encabezados y filas con datos de proyectos, o importá directamente tu archivo CSV.`
         );
       }
 

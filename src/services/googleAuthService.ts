@@ -82,6 +82,20 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
+    if (error?.code === 'auth/popup-blocked') {
+      console.warn('Google Sign In: popup was blocked by browser');
+      const err = new Error(
+        'La ventana emergente de inicio de sesión de Google fue bloqueada por el navegador. Permití las ventanas emergentes en la barra de direcciones de tu navegador e intentá nuevamente con el botón de conexión.'
+      );
+      (err as any).code = 'auth/popup-blocked';
+      throw err;
+    }
+    if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
+      console.info('Google Sign In cancelled by user');
+      const err = new Error('Inicio de sesión cancelado.');
+      (err as any).code = error?.code;
+      throw err;
+    }
     console.error('Google Sign In error:', error);
     throw error;
   } finally {
