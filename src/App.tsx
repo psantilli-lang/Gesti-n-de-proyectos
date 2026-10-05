@@ -349,14 +349,8 @@ export default function App() {
     }
   };
 
-  const handleDeleteProject = (projectId: string) => {
-    const updatedList = projects.filter((p) => p.id !== projectId);
-    setProjects(updatedList);
-    storageService.saveProjects(updatedList);
-    firestoreService.deleteProject(projectId).catch((e) => console.warn('Firestore deleteProject error:', e));
-    if (selectedProjectForDetail && selectedProjectForDetail.id === projectId) {
-      setSelectedProjectForDetail(null);
-    }
+  const handleDeleteProject = (_projectId: string) => {
+    alert('Operación no permitida: Por política de integridad y auditoría histórica, ningún usuario tiene permiso para borrar proyectos del sistema.');
   };
 
   const handleUserChange = (user: UserSession) => {
@@ -496,20 +490,8 @@ export default function App() {
     setActionModalState({ type: null, project: null });
   };
 
-  const handleDeleteAction = (actionId: string) => {
-    if (!currentUser || !isPMO(currentUser)) {
-      alert('Permiso denegado: Los usuarios comunes no pueden borrar acciones, solo el PMO.');
-      return;
-    }
-    if (!actionModalState.project) return;
-    const project = actionModalState.project;
-    const updatedActions = project.actions.filter((a) => a.id !== actionId);
-    const updatedProject: SAPProject = {
-      ...project,
-      actions: updatedActions,
-      updatedAt: new Date().toISOString(),
-    };
-    handleUpdateProject(updatedProject);
+  const handleDeleteAction = (_actionId: string) => {
+    alert('Operación no permitida: Por política de integridad y auditoría histórica, ningún usuario tiene permiso para borrar acciones del sistema.');
     setActionModalState({ type: null, project: null });
   };
 

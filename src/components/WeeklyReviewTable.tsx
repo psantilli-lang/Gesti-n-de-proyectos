@@ -12,7 +12,6 @@ import {
   formatDateSpanish, 
   canUserEditAction, 
   canUserAddAction,
-  canUserDeleteAction,
   canUserCancelProject,
   canUserAccessReportingAndPrioritization,
   isActionOverdue,
@@ -21,11 +20,11 @@ import {
 import { 
   ExternalLink, 
   Plus, 
-  Trash2, 
   MessageSquare, 
   Clock, 
   User, 
   Paperclip,
+  Edit3,
 } from 'lucide-react';
 
 interface WeeklyReviewTableProps {
@@ -110,7 +109,6 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
               return rowsToRender.map((action, actionIdx) => {
                 const isFirstRowOfProject = actionIdx === 0;
                 const canEditAct = action ? canUserEditAction(currentUser, action) : false;
-                const canDeleteAct = action ? canUserDeleteAction(currentUser, action, project) : false;
                 const isOverdue = action ? isActionOverdue(action) : false;
                 const isDueSoon = action ? isActionDueSoon(action) : false;
 
@@ -245,9 +243,27 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     <td className="py-2 px-2 border-r border-slate-200 align-top">
                       {action ? (
                         <div className="space-y-1">
-                          <span className="font-semibold text-slate-900 block text-[11px] leading-snug break-words whitespace-normal" title={action.title}>
-                            {action.title}
-                          </span>
+                          <div className="flex items-start justify-between gap-1 group">
+                            <span 
+                              onClick={() => canEditAct && onOpenEditAction(project, action)}
+                              className={`font-semibold text-slate-900 block text-[11px] leading-snug break-words whitespace-normal ${
+                                canEditAct ? 'hover:text-blue-700 cursor-pointer' : ''
+                              }`} 
+                              title={canEditAct ? 'Hacé clic para editar la acción o corregir faltas ortográficas' : action.title}
+                            >
+                              {action.title}
+                            </span>
+                            {canEditAct && (
+                              <button
+                                type="button"
+                                onClick={() => onOpenEditAction(project, action)}
+                                className="p-0.5 text-slate-400 hover:text-blue-600 rounded transition-colors shrink-0 opacity-60 hover:opacity-100 cursor-pointer"
+                                title="Editar texto de la acción / corregir ortografía"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <div className="flex items-center justify-between text-slate-400 italic text-[11px] py-0.5">
@@ -389,7 +405,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
 
                     {/* 11. Operaciones */}
                     <td className="py-2 px-1 text-center align-top">
-                      <div className="flex items-center justify-center gap-1">
+                      <div className="flex items-center justify-center">
                         <button
                           type="button"
                           disabled={!canAdd}
@@ -403,26 +419,6 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
-
-                        {action && canDeleteAct && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm(`¿Está seguro de eliminar la acción "${action.title}"? Esta acción solo puede ser eliminada por el PMO.`)) {
-                                const updatedActions = project.actions.filter((a) => a.id !== action.id);
-                                onUpdateProject({
-                                  ...project,
-                                  actions: updatedActions,
-                                  updatedAt: new Date().toISOString(),
-                                });
-                              }
-                            }}
-                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                            title="Eliminar acción (Solo PMO)"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>

@@ -13,7 +13,6 @@ import {
   formatDateSpanish, 
   canUserEditAction, 
   canUserAddAction,
-  canUserDeleteAction,
   canUserCancelProject,
   canUserAccessReportingAndPrioritization,
   isPMO,
@@ -1117,7 +1116,6 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
                           <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
                             {activeActions.map((action) => {
                               const canEdit = canUserEditAction(currentUser, action);
-                              const canDeleteAct = canUserDeleteAction(currentUser, action, project);
                               const isOverdue = isActionOverdue(action);
                               const isDueSoon = isActionDueSoon(action);
 
@@ -1202,9 +1200,13 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
                                       </div>
 
                                       {/* Action Title */}
-                                      <p className={`text-sm font-semibold ${
-                                        action.status === 'Finalizada' ? 'line-through text-slate-400' : 'text-slate-900'
-                                      }`}>
+                                      <p 
+                                        onClick={() => canEdit && onOpenEditAction(project, action)}
+                                        className={`text-sm font-semibold ${
+                                          action.status === 'Finalizada' ? 'line-through text-slate-400' : 'text-slate-900'
+                                        } ${canEdit ? 'cursor-pointer hover:text-blue-700' : ''}`}
+                                        title={canEdit ? 'Hacé clic para editar la acción o corregir faltas de ortografía' : action.title}
+                                      >
                                         {action.title}
                                       </p>
 
@@ -1292,40 +1294,20 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
                                         }`}
                                       >
                                         <MessageSquare className="w-3.5 h-3.5" />
-                                        <span>{canEdit ? 'Actualizar Comentario' : 'Ver Comentario'}</span>
+                                        <span>{canEdit ? 'Editar Acción / Comentario' : 'Ver Comentario'}</span>
                                       </button>
 
-                                      {canDeleteAct && (
-                                        <button
-                                          onClick={() => {
-                                            if (window.confirm(`¿Está seguro de eliminar la acción "${action.title}"? Esta acción solo puede ser eliminada por el PMO.`)) {
-                                              const updatedActions = project.actions.filter((a) => a.id !== action.id);
-                                              onUpdateProject({
-                                                ...project,
-                                                actions: updatedActions,
-                                                updatedAt: new Date().toISOString(),
-                                              });
-                                            }
-                                          }}
-                                          className="px-2 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded text-[11px] font-medium transition-colors flex items-center gap-1 border border-transparent hover:border-rose-200 cursor-pointer shadow-2xs"
-                                          title="Eliminar acción (Solo PMO)"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                          <span>Eliminar</span>
-                                        </button>
-                                      )}
-
-                                      {!canEdit && !canDeleteAct && (
-                                        <span className="text-[10px] text-slate-400 flex items-center gap-1" title="Solo editable por el responsable asignado o Administrador">
-                                          <ShieldAlert className="w-3 h-3 text-slate-400" />
-                                          Solo responsable
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
+                                      {!canEdit && (
+                                         <span className="text-[10px] text-slate-400 flex items-center gap-1" title="Solo editable por el responsable asignado o Administrador">
+                                           <ShieldAlert className="w-3 h-3 text-slate-400" />
+                                           Solo responsable
+                                         </span>
+                                       )}
+                                     </div>
+                                   </div>
+                                 </div>
+                               );
+                             })}
                           </div>
                         )}
                       </div>

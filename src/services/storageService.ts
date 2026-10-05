@@ -258,7 +258,7 @@ export const storageService = {
 
       let updated = false;
 
-      // Ensure every user has username, password, and unique ID
+      // Ensure every user has username, password, and unique ID, and key PMO accounts are admin
       const sanitized = usersList.map((u, idx) => {
         const copy = { ...u };
         if (!copy.id) {
@@ -272,6 +272,23 @@ export const storageService = {
         if (!copy.password) {
           copy.password = copy.username === 'admin' ? 'admin' : copy.username === 'pmo' ? 'pmo' : '123';
           updated = true;
+        }
+        // Guarantee PMO administrative privileges
+        const uLower = (copy.username || '').toLowerCase();
+        const eLower = (copy.email || '').toLowerCase();
+        const nLower = (copy.name || '').toLowerCase();
+        if (
+          uLower === 'psantilli' || 
+          uLower === 'admin' || 
+          uLower === 'pmo' ||
+          eLower === 'psantilli@crucianelli.com' ||
+          nLower.includes('santilli') ||
+          nLower.includes('pmo')
+        ) {
+          if (copy.role !== 'admin' && copy.role !== 'pmo') {
+            copy.role = 'admin';
+            updated = true;
+          }
         }
         return copy;
       });

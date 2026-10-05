@@ -37,7 +37,6 @@ import {
   isActionDueSoon,
   isActionAssignedToUser,
   canUserEditAction,
-  canUserDeleteAction,
 } from '../utils/helpers';
 
 interface PendingTasksViewProps {
@@ -550,9 +549,11 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
 
                       <div className="space-y-1 flex-1">
                         <h4
+                          onClick={() => canEdit && onOpenEditAction(project, action)}
                           className={`text-sm font-bold text-slate-900 leading-snug ${
                             action.status === 'Finalizada' ? 'line-through text-slate-400' : ''
-                          }`}
+                          } ${canEdit ? 'cursor-pointer hover:text-blue-700' : ''}`}
+                          title={canEdit ? 'Hacé clic para editar la acción o corregir faltas de ortografía' : action.title}
                         >
                           {action.title}
                         </h4>
@@ -711,32 +712,11 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
                       <button
                         onClick={() => onOpenEditAction(project, action)}
                         className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
-                        title="Registrar avance, comentarios o subir adjuntos"
+                        title="Registrar avance, comentarios, editar texto o subir adjuntos"
                       >
                         <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Avance</span>
+                        <span>{canEdit ? 'Editar / Avance' : 'Detalle'}</span>
                       </button>
-
-                      {/* Delete Action Button (PMO or Project Creator) */}
-                      {canUserDeleteAction(currentUser, action, project) && (
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`¿Está seguro de eliminar la acción "${action.title}"? Solo el PMO o quien creó el proyecto pueden eliminar acciones.`)) {
-                              const updatedActions = project.actions.filter((a) => a.id !== action.id);
-                              onUpdateProject({
-                                ...project,
-                                actions: updatedActions,
-                                updatedAt: new Date().toISOString(),
-                              });
-                            }
-                          }}
-                          className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                          title="Eliminar tarea (PMO o quien dio de alta el proyecto)"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Eliminar</span>
-                        </button>
-                      )}
 
                       {/* View Project Button */}
                       <button

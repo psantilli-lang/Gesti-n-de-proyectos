@@ -17,7 +17,6 @@ import {
   canUserEditProjectMetadata, 
   canUserEditProjectDates,
   canUserAddAction,
-  canUserDeleteAction,
   canUserCancelProject,
   canUserAccessReportingAndPrioritization,
   isPMO,
@@ -727,7 +726,6 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                 <div className="space-y-3">
                   {filteredActions.map((action) => {
                     const canEdit = canUserEditAction(currentUser, action);
-                    const canDeleteAct = canUserDeleteAction(currentUser, action, project);
                     const isOverdue = isActionOverdue(action);
 
                     return (
@@ -875,32 +873,12 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                                     : 'bg-slate-100 text-slate-500 border border-slate-200'
                                 }`}
                               >
-                                <MessageSquare className="w-3.5 h-3.5" />
-                                <span>{canEdit ? 'Editar Estado / Comentario' : 'Ver Comentario'}</span>
+                                 <MessageSquare className="w-3.5 h-3.5" />
+                                <span>{canEdit ? 'Editar Acción / Comentario' : 'Ver Comentario'}</span>
                               </button>
                             </div>
 
-                            {canDeleteAct && (
-                              <button
-                                onClick={() => {
-                                  if (window.confirm(`¿Está seguro de eliminar la acción "${action.title}"? Esta acción solo puede ser eliminada por el PMO.`)) {
-                                    const updatedActions = project.actions.filter((a) => a.id !== action.id);
-                                    onUpdateProject({
-                                      ...project,
-                                      actions: updatedActions,
-                                      updatedAt: new Date().toISOString(),
-                                    });
-                                  }
-                                }}
-                                className="px-2.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200 flex items-center gap-1 text-[11px] font-medium cursor-pointer shadow-2xs"
-                                title="Eliminar acción (Solo PMO)"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>Eliminar Acción</span>
-                              </button>
-                            )}
-
-                            {!canEdit && !canDeleteAct && (
+                            {!canEdit && (
                               <span className="text-[10px] text-slate-400 flex items-center gap-1">
                                 <ShieldAlert className="w-3 h-3 text-slate-400" />
                                 Solo {action.responsible} o PMO

@@ -11,7 +11,6 @@ import { storageService } from '../services/storageService';
 import { 
   canUserEditProjectMetadata, 
   canUserEditProjectDates,
-  canUserDeleteProject,
   canUserCancelProject,
   isUserProjectCreator,
   isPMO,
@@ -24,7 +23,6 @@ import {
   Plus, 
   ExternalLink, 
   Edit3, 
-  Trash2, 
   Clock, 
   CheckCircle2, 
   AlertCircle,
@@ -456,19 +454,6 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    {canUserDeleteProject(currentUser, project) && (
-                      <button
-                        onClick={() => {
-                          if (window.confirm(`¿Está seguro de eliminar el proyecto ${project.code}? Solo el PMO o quien dio de alta el proyecto pueden eliminarlo.`)) {
-                            onDeleteProject(project.id);
-                          }
-                        }}
-                        className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200"
-                        title="Eliminar proyecto (PMO o quien dio el alta)"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>
@@ -627,19 +612,6 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
                               }
                             >
                               <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {canUserDeleteProject(currentUser, project) && (
-                            <button
-                              onClick={() => {
-                                if (window.confirm(`¿Está seguro de eliminar el proyecto ${project.code}? Solo el PMO o quien dio de alta el proyecto pueden eliminarlo.`)) {
-                                  onDeleteProject(project.id);
-                                }
-                              }}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
-                              title="Eliminar proyecto (PMO o quien dio el alta)"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>

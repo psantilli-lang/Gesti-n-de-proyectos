@@ -32,7 +32,31 @@ export function cleanPersonName(name?: string): string {
  */
 export function isPMO(user?: UserSession | null): boolean {
   if (!user) return false;
-  return user.role === 'pmo' || user.role === 'admin';
+  if (user.role === 'pmo' || user.role === 'admin') return true;
+  const username = (user.username || '').toLowerCase();
+  if (
+    username === 'pmo' || 
+    username === 'admin' || 
+    username === 'psantilli' ||
+    username.includes('santilli') ||
+    username.includes('paola') ||
+    username.includes('pmo')
+  ) return true;
+  const name = (user.name || '').toLowerCase();
+  if (
+    name.includes('pmo') || 
+    name.includes('santilli') || 
+    name.includes('paola')
+  ) return true;
+  const email = (user.email || '').toLowerCase();
+  if (
+    email.includes('pmo') || 
+    email.includes('psantilli') || 
+    email.includes('santilli') || 
+    email.includes('paola') ||
+    email === 'psantilli@crucianelli.com'
+  ) return true;
+  return false;
 }
 
 /**
@@ -123,6 +147,11 @@ export function isActionAssignedToUser(user?: UserSession | null, action?: Stage
 export function canUserEditAction(user?: UserSession | null, action?: StageAction | null): boolean {
   if (!user || !action) return false;
   if (isPMO(user)) return true;
+  // If the action is unassigned ("Sin asignar" or empty), anyone with an active session can edit / assign it
+  const resp = (action.responsible || '').trim().toLowerCase();
+  if (!resp || resp === 'sin asignar' || resp === 'sin asignar.' || resp === 'unassigned') {
+    return true;
+  }
   return isActionAssignedToUser(user, action);
 }
 
@@ -149,11 +178,10 @@ export function canUserEditProjectMetadata(user?: UserSession | null, project?: 
 
 /**
  * Check if user can delete a project.
- * Rule: Solo el PMO o quien dio de alta el proyecto.
+ * Rule: Ningún usuario puede borrar proyectos (garantizado para integridad y trazabilidad de auditoría).
  */
-export function canUserDeleteProject(user?: UserSession | null, project?: SAPProject | null): boolean {
-  if (!user || !project) return false;
-  return isPMO(user) || isUserProjectCreator(user, project);
+export function canUserDeleteProject(_user?: UserSession | null, _project?: SAPProject | null): boolean {
+  return false;
 }
 
 /**
@@ -193,15 +221,30 @@ export function canUserAddAction(user?: UserSession | null, project?: SAPProject
 
 /**
  * Check if user can delete an action.
- * Rule: Los usuarios comunes no pueden borrar acciones, solo el PMO.
+ * Rule: Ningún usuario puede borrar acciones (garantizado para integridad y trazabilidad de auditoría).
  */
 export function canUserDeleteAction(
-  user?: UserSession | null,
-  action?: StageAction | null,
-  project?: SAPProject | null
+  _user?: UserSession | null,
+  _action?: StageAction | null,
+  _project?: SAPProject | null
 ): boolean {
-  if (!user || !action) return false;
-  return isPMO(user);
+  return false;
+}
+
+/**
+ * Check if user can edit the defined title/description of an action.
+ * Rule: El PMO tiene acceso completo para editar las acciones definidas (corregir texto, ortografía o detalles).
+ * También permitido para la persona asignada o quien la creó.
+ */
+export function canUserEditActionDefinition(
+  user?: UserSession | null,
+  action?: StageAction | null
+): boolean {
+  if (!user) return false;
+  if (isPMO(user)) return true;
+  if (!action) return false;
+  if (action.createdBy && cleanPersonName(user.name) === cleanPersonName(action.createdBy)) return true;
+  return isActionAssignedToUser(user, action);
 }
 
 /**

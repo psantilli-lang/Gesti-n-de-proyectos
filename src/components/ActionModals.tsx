@@ -14,6 +14,8 @@ import {
   canUserEditAction, 
   canUserAddAction,
   canUserDeleteAction,
+  canUserEditActionDefinition,
+  isPMO,
   formatDateSpanish, 
   formatFileSize 
 } from '../utils/helpers';
@@ -33,6 +35,7 @@ import {
   Trash2,
   FileText,
   Eye,
+  Edit3,
 } from 'lucide-react';
 
 // MODAL PARA AGREGAR NUEVA ACCIÓN
@@ -554,9 +557,13 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
   onDeleteAction,
   onPreviewFile,
 }) => {
-  const canEdit = canUserEditAction(currentUser, action);
-  const canDelete = canUserDeleteAction(currentUser, action, project);
+  const isPmo = isPMO(currentUser);
+  const canEdit = canUserEditAction(currentUser, action) || isPmo;
+  const canEditDefinition = canUserEditActionDefinition(currentUser, action) || isPmo;
 
+  const [title, setTitle] = useState<string>(action.title);
+  const [responsible, setResponsible] = useState<string>(action.responsible);
+  const [stageId, setStageId] = useState<number>(action.stageId);
   const [status, setStatus] = useState<ActionStatus>(action.status);
   const [requiredDate, setRequiredDate] = useState<string>(action.requiredDate);
   const [executionComment, setExecutionComment] = useState<string>(
@@ -612,8 +619,17 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
       ? newCommentNote.trim()
       : executionComment;
 
+    const finalTitle = title.trim() || action.title;
+    const finalResponsible = responsible.trim() || action.responsible;
+    const matchedStage = PROJECT_STAGES.find((s) => s.id === stageId);
+    const finalStageName = matchedStage ? matchedStage.name : action.stageName;
+
     const updatedAction: StageAction = {
       ...action,
+      title: finalTitle,
+      responsible: finalResponsible,
+      stageId: stageId,
+      stageName: finalStageName,
       status,
       requiredDate,
       executionComment: finalComment,
@@ -658,31 +674,91 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
           <div className="bg-emerald-50 border-b border-emerald-200 p-2.5 px-6 flex items-center gap-2 text-xs text-emerald-900">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>
-              Tenés permisos para editar como <strong>{currentUser?.name || 'Usuario'}</strong>.
+              Tenés permisos para editar como <strong>{currentUser?.name || 'Usuario'}</strong>{isPmo ? ' (Rol PMO activo)' : ''}.
             </span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs text-slate-800">
-          {/* Action Title (Read Only) */}
-          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
-              Acción a Realizar:
-            </span>
-            <p className="text-sm font-bold text-slate-900 leading-snug">
-              {action.title}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-              <span className="font-mono text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                Etapa de origen: {action.stageName}
-              </span>
-              <span className="flex items-center gap-1 font-semibold">
-                <User className="w-3.5 h-3.5 text-blue-600" />
-                Responsable: {action.responsible}
-              </span>
-              <span className="text-[10px] text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                Creada por: <strong>{action.createdBy || action.responsible}</strong>
-              </span>
+          {/* Action Title / Description (Editable for PMO to fix typos or adjust description) */}
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] uppercase font-bold text-slate-500 flex items-center gap-1">
+                <Edit3 className="w-3 h-3 text-blue-600" />
+                <span>Acción Definida (Texto / Descripción):</span>
+              </label>
+              {canEditDefinition && (
+                <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded shadow-2xs">
+                  {isPmo ? 'Edición PMO habilitada' : 'Edición habilitada'}
+                </span>
+              )}
+            </div>
+
+            {canEditDefinition ? (
+              <div>
+                <textarea
+                  rows={2}
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs leading-snug"
+                  placeholder="Escribí el texto de la acción (podés corregir faltas de ortografía o redacción)..."
+                  required
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Acceso habilitado para corregir errores de ortografía, redacción o el detalle de la acción.
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm font-bold text-slate-900 leading-snug">
+                {action.title}
+              </p>
+            )}
+
+            <div className="pt-2 border-t border-slate-200/80 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+              {/* Etapa de origen */}
+              <div>
+                <span className="text-[10px] font-bold text-slate-500 block mb-0.5">Etapa de origen:</span>
+                {isPmo ? (
+                  <select
+                    value={stageId}
+                    onChange={(e) => setStageId(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-[11px] font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    {PROJECT_STAGES.map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="font-mono text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 inline-block">
+                    {action.stageName}
+                  </span>
+                )}
+              </div>
+
+              {/* Responsable */}
+              <div>
+                <span className="text-[10px] font-bold text-slate-500 block mb-0.5">Responsable:</span>
+                {isPmo ? (
+                  <input
+                    type="text"
+                    value={responsible}
+                    onChange={(e) => setResponsible(e.target.value)}
+                    placeholder="Nombre del responsable"
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-[11px] font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                ) : (
+                  <span className="flex items-center gap-1 font-semibold text-slate-700 py-0.5">
+                    <User className="w-3.5 h-3.5 text-blue-600" />
+                    {action.responsible}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="text-[10px] text-slate-500 pt-1">
+              Creada por: <strong>{action.createdBy || action.responsible}</strong>
             </div>
           </div>
 
@@ -935,23 +1011,9 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
 
           {/* Footer controls */}
           <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
-            <div>
-              {onDeleteAction && canDelete && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm(`¿Está seguro de eliminar la acción "${action.title}"? Esta acción solo puede ser eliminada por el PMO.`)) {
-                      onDeleteAction(action.id);
-                      onClose();
-                    }
-                  }}
-                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                  title="Eliminar acción (Solo PMO)"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Eliminar Acción</span>
-                </button>
-              )}
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <ShieldCheck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>Acción permanente protegida (no eliminable)</span>
             </div>
 
             <div className="flex items-center gap-2">
