@@ -70,27 +70,27 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
           <thead>
             <tr className="bg-slate-800 text-white font-semibold text-[10.5px] uppercase tracking-wider select-none">
               {/* 1. N° Proyecto */}
-              <th className="py-2.5 px-2 text-center w-[76px] border-r border-slate-700">N° Proy.</th>
+              <th className="py-2.5 px-1.5 text-center w-[68px] min-w-[64px] border-r border-slate-700">N° Proy.</th>
               {/* 2. Prioridad */}
-              <th className="py-2.5 px-1 text-center w-[46px] border-r border-slate-700">Prio.</th>
+              <th className="py-2.5 px-1 text-center w-[38px] min-w-[36px] border-r border-slate-700">Prio.</th>
               {/* 3. Título del Proyecto */}
-              <th className="py-2.5 px-2.5 w-[16%] min-w-[125px] border-r border-slate-700">Título Proyecto</th>
+              <th className="py-2.5 px-2 w-[14%] min-w-[110px] border-r border-slate-700">Título Proyecto</th>
               {/* 4. Área */}
-              <th className="py-2.5 px-2 w-[85px] border-r border-slate-700">Área</th>
+              <th className="py-2.5 px-1.5 text-center w-[76px] min-w-[72px] border-r border-slate-700">Área</th>
               {/* 5. Estado Proyecto */}
-              <th className="py-2.5 px-2 w-[128px] border-r border-slate-700">Estado Proy.</th>
+              <th className="py-2.5 px-1.5 w-[118px] min-w-[115px] border-r border-slate-700">Estado Proy.</th>
               {/* 6. Acción Pendiente */}
-              <th className="py-2.5 px-2 w-[17%] min-w-[125px] border-r border-slate-700">Acción Pendiente</th>
+              <th className="py-2.5 px-2 w-[13%] min-w-[95px] border-r border-slate-700">Acción Pendiente</th>
               {/* 7. Responsable */}
-              <th className="py-2.5 px-2 w-[105px] border-r border-slate-700">Responsable</th>
+              <th className="py-2.5 px-1.5 w-[92px] min-w-[88px] border-r border-slate-700">Responsable</th>
               {/* 8. Vencimiento */}
-              <th className="py-2.5 px-1.5 text-center w-[82px] border-r border-slate-700">Vencimiento</th>
+              <th className="py-2.5 px-1 text-center w-[76px] min-w-[72px] border-r border-slate-700">Vencimiento</th>
               {/* 9. Estado Acción */}
-              <th className="py-2.5 px-2 text-center w-[130px] min-w-[126px] border-r border-slate-700">Estado Acción</th>
+              <th className="py-2.5 px-1.5 text-center w-[124px] min-w-[122px] border-r border-slate-700">Estado Acción</th>
               {/* 10. Comentario / Avance */}
-              <th className="py-2.5 px-2.5 w-[17%] min-w-[130px] border-r border-slate-700">Comentario / Avance</th>
+              <th className="py-2.5 px-2 w-[14%] min-w-[105px] border-r border-slate-700">Comentario / Avance</th>
               {/* 11. Operaciones */}
-              <th className="py-2.5 px-1 text-center w-[48px]">Acción</th>
+              <th className="py-2.5 px-1 text-center w-[46px] min-w-[44px]">Acción</th>
             </tr>
           </thead>
           <tbody className="text-slate-700">
@@ -242,10 +242,10 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     )}
 
                     {/* 6. Acción Pendiente (o celda vacía para agregar) */}
-                    <td className="py-2 px-2.5 border-r border-slate-200 align-top">
+                    <td className="py-2 px-2 border-r border-slate-200 align-top">
                       {action ? (
                         <div className="space-y-1">
-                          <span className="font-semibold text-slate-900 block text-xs leading-snug" title={action.title}>
+                          <span className="font-semibold text-slate-900 block text-[11px] leading-snug break-words whitespace-normal" title={action.title}>
                             {action.title}
                           </span>
                         </div>
@@ -271,11 +271,11 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     </td>
 
                     {/* 7. Responsable */}
-                    <td className="py-2 px-2 border-r border-slate-200 align-top">
+                    <td className="py-2 px-1.5 border-r border-slate-200 align-top">
                       {action ? (
-                        <span className="inline-flex items-center gap-1 text-slate-700 font-semibold text-[11px]" title={action.responsible}>
+                        <span className="inline-flex items-center gap-1 text-slate-700 font-semibold text-[10.5px]" title={action.responsible}>
                           <User className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span className="truncate max-w-[85px]">
+                          <span className="truncate max-w-[74px]">
                             {action.responsible}
                           </span>
                         </span>
@@ -307,13 +307,13 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     </td>
 
                     {/* 9. Estado Acción (Desplegable para evitar clics accidentales) */}
-                    <td className="py-2 px-2 text-center border-r border-slate-200 align-top">
+                    <td className="py-2 px-1.5 text-center border-r border-slate-200 align-top">
                       {action ? (
                         <select
                           value={action.status}
                           disabled={!canEditAct}
                           onChange={(e) => onActionStatusChange(project, action, e.target.value as ActionStatus)}
-                          className={`w-full text-[11px] font-bold rounded px-2 py-1 border shadow-2xs cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                          className={`w-full text-[10.5px] font-bold rounded px-1.5 py-1 border shadow-2xs cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                             action.status === 'Finalizada'
                               ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
                               : action.status === 'En proceso'
@@ -389,13 +389,15 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
 
                     {/* 11. Operaciones */}
                     <td className="py-2 px-1 text-center align-top">
-                      <div className="flex items-center justify-center gap-0.5">
+                      <div className="flex items-center justify-center gap-1">
                         <button
                           type="button"
                           disabled={!canAdd}
                           onClick={() => onOpenAddAction(project)}
-                          className={`p-1 rounded text-blue-700 hover:bg-blue-100 transition-colors ${
-                            canAdd ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+                          className={`p-1.5 rounded-md transition-all flex items-center justify-center ${
+                            canAdd
+                              ? 'text-blue-700 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-200 shadow-2xs cursor-pointer'
+                              : 'text-slate-400 bg-slate-50 border border-slate-200 cursor-not-allowed opacity-50'
                           }`}
                           title="Agregar nueva acción a este proyecto"
                         >

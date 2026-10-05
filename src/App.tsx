@@ -569,8 +569,8 @@ export default function App() {
       />
 
       {/* Main Tab Content Container */}
-      <main className={`flex-1 w-full mx-auto px-3 sm:px-5 lg:px-6 pt-5 print:p-0 print:m-0 print:max-w-none ${
-        activeTab === 'weekly' ? 'max-w-full' : 'max-w-7xl'
+      <main className={`flex-1 w-full mx-auto pt-5 print:p-0 print:m-0 print:max-w-none ${
+        activeTab === 'weekly' ? 'max-w-full px-2 sm:px-4 lg:px-4' : 'max-w-7xl px-3 sm:px-5 lg:px-6'
       }`}>
         {activeTab === 'weekly' && (
           <WeeklyReviewView
