@@ -1,30 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
-  <defs>
-    <!-- Subtle gradient for rich Crucianelli corporate red -->
-    <linearGradient id="crucianelliRed" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#D9162A" />
-      <stop offset="100%" stop-color="#BA0C1E" />
-    </linearGradient>
-    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#7B0511" flood-opacity="0.4" />
-    </filter>
-  </defs>
+  <!-- Crucianelli Solid Corporate Red Background -->
+  <rect width="512" height="512" rx="104" fill="#DE1C24" />
 
-  <!-- Red Rounded Square Icon Background -->
-  <rect width="512" height="512" rx="108" fill="url(#crucianelliRed)" />
+  <!-- Crucianelli Iconic Dual-Track White 'C' -->
+  <g fill="#FFFFFF">
+    <!-- Top Horizontal Bar 1 (Upper Outer) -->
+    <polygon points="230,76 480,76 460,128 230,128" />
 
-  <!-- Crucianelli Stylized Double-Arc 'C' Emblem -->
-  <g fill="#FFFFFF" filter="url(#subtleShadow)">
-    <!-- Main Top Arc & Upper Horizontal Bar -->
-    <path d="M 345 148 L 332 206 L 244 206 C 205 206 172 232 158 268 C 148 294 147 326 156 352 C 145 328 141 292 153 260 C 172 208 220 174 278 174 L 350 174 Z" opacity="0.99" />
-    
-    <!-- Top Horizontal Blade -->
-    <path d="M 194 238 L 338 238 L 326 292 L 232 292 C 208 292 188 304 176 322 C 174 306 178 274 194 238 Z" />
+    <!-- Top Horizontal Bar 2 (Upper Inner) -->
+    <polygon points="245,150 460,150 442,202 245,202" />
 
-    <!-- Outer Lower Crescent Arch -->
-    <path d="M 152 260 C 130 306 128 360 156 404 C 182 446 228 472 278 472 C 304 472 328 466 348 454 L 332 402 C 316 410 298 414 278 414 C 242 414 208 396 190 366 C 176 342 174 316 182 292 C 168 284 158 272 152 260 Z" />
+    <!-- Outer Upper Curve connecting to Top Bar 1 -->
+    <path d="M 230,76 C 145,76 100,140 100,230 C 100,290 120,340 155,385 C 140,345 136,300 136,250 C 136,175 175,128 230,128 Z" />
 
-    <!-- Inner Lower Sweep Band -->
-    <path d="M 176 322 C 186 350 206 372 234 382 C 248 388 264 390 280 390 C 308 390 334 378 352 358 L 368 408 C 344 434 310 448 272 448 C 248 448 226 442 206 430 C 178 412 160 384 154 350 C 162 342 170 332 176 322 Z" />
+    <!-- Inner Spine connecting Top Bar 2 down to Bottom Bar 1 -->
+    <path d="M 245,150 C 200,150 170,185 170,245 C 170,305 200,345 245,345 L 415,345 L 398,397 L 245,397 C 165,397 122,335 122,245 C 122,170 170,128 220,128 Z" />
+
+    <!-- Bottom Horizontal Bar 1 (Lower Inner) is integrated in path above: (245,345) to (415,345) to (398,397) to (245,397) -->
+
+    <!-- Outer Lower Crescent and Bottom Horizontal Bar 2 (Lower Outer) -->
+    <path d="M 155,205 C 120,250 102,305 102,365 C 102,425 145,475 235,475 L 388,475 L 370,423 L 235,423 C 178,423 148,390 148,345 C 148,295 162,250 185,205 Z" />
   </g>
 </svg>
