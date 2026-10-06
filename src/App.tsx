@@ -663,6 +663,11 @@ export default function App() {
             project={actionModalState.project}
             action={actionModalState.action}
             currentUser={currentUser}
+            allUsers={usersList}
+            onUpdateCurrentUser={(promotedUser) => {
+              setCurrentUser(promotedUser);
+              storageService.setCurrentUser(promotedUser);
+            }}
             onClose={() => setActionModalState({ type: null, project: null })}
             onSaveAction={handleSaveEditedAction}
             onDeleteAction={handleDeleteAction}

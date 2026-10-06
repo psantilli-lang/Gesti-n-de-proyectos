@@ -341,13 +341,20 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
   }, [uniquePriorities, projects]);
 
   const codeOptions: MultiSelectOption[] = useMemo(() => {
-    return projects
-      .map((p) => ({
-        value: p.code,
-        label: `${p.code} - ${p.title}`,
-        count: 1,
-      }))
-      .sort((a, b) => a.value.localeCompare(b.value, undefined, { numeric: true }));
+    const seen = new Set<string>();
+    const opts: MultiSelectOption[] = [];
+    projects.forEach((p) => {
+      const code = (p.code || '').trim();
+      if (code && !seen.has(code.toLowerCase())) {
+        seen.add(code.toLowerCase());
+        opts.push({
+          value: code,
+          label: `${code} - ${p.title}`,
+          count: projects.filter((item) => (item.code || '').trim().toLowerCase() === code.toLowerCase()).length,
+        });
+      }
+    });
+    return opts.sort((a, b) => a.value.localeCompare(b.value, undefined, { numeric: true }));
   }, [projects]);
 
   // Check if any filter is actively restricting results
@@ -392,8 +399,13 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
       }
 
       // 4. Project Number / Code match (multi-select)
-      if (selectedProjectCodes.length > 0 && !selectedProjectCodes.includes(p.code)) {
-        return false;
+      if (selectedProjectCodes.length > 0) {
+        const matchesCode = selectedProjectCodes.some((code) => {
+          const cClean = code.trim().toLowerCase();
+          const pClean = (p.code || '').trim().toLowerCase();
+          return cClean === pClean || cClean.replace(/[-\s]/g, '') === pClean.replace(/[-\s]/g, '');
+        });
+        if (!matchesCode) return false;
       }
 
       // 4. Status/Condition filters (pending actions / delayed)
@@ -420,7 +432,7 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
       if (a.area !== b.area) return a.area.localeCompare(b.area);
       return a.priority - b.priority;
     });
-  }, [projects, selectedAreas, selectedStates, selectedPriorities, statusFilter, searchTerm]);
+  }, [projects, selectedAreas, selectedStates, selectedPriorities, selectedProjectCodes, statusFilter, searchTerm]);
 
   // Group filtered projects by area for structured sweeping
   const groupedByArea = useMemo<Record<string, SAPProject[]>>(() => {

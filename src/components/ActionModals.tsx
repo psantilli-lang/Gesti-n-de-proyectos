@@ -541,6 +541,8 @@ interface EditActionModalProps {
   project: SAPProject;
   action: StageAction;
   currentUser: UserSession;
+  allUsers?: AppUser[];
+  onUpdateCurrentUser?: (user: UserSession) => void;
   onClose: () => void;
   onSaveAction: (updatedAction: StageAction) => void;
   onDeleteAction?: (actionId: string) => void;
@@ -552,18 +554,62 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
   project,
   action,
   currentUser,
+  allUsers = [],
+  onUpdateCurrentUser,
   onClose,
   onSaveAction,
   onDeleteAction,
   onPreviewFile,
 }) => {
-  const isPmo = isPMO(currentUser);
-  const [pmoUnlocked, setPmoUnlocked] = useState<boolean>(false);
-  const effectiveIsPmo = isPmo || pmoUnlocked;
+  const [pmoOverride, setPmoOverride] = useState<boolean>(false);
+
+  const isPmo = isPMO(currentUser) || pmoOverride;
   const canEdit = canUserEditAction(currentUser, action) || isPmo;
-  const effectiveCanEdit = canEdit || pmoUnlocked;
   const canEditDefinition = canUserEditActionDefinition(currentUser, action) || isPmo;
-  const effectiveCanEditDefinition = canEditDefinition || pmoUnlocked;
+
+  const handleEnablePmo = () => {
+    // If user's account name or email is already Paola Santilli, auto-promote immediately
+    const n = (currentUser.name || '').toLowerCase();
+    const e = (currentUser.email || '').toLowerCase();
+    const u = (currentUser.username || '').toLowerCase();
+
+    if (
+      n.includes('santilli') ||
+      n.includes('paola') ||
+      n.includes('pmo') ||
+      e.includes('santilli') ||
+      e.includes('psantilli') ||
+      e === 'psantilli@crucianelli.com' ||
+      u === 'psantilli' ||
+      u === 'pmo' ||
+      u === 'admin'
+    ) {
+      setPmoOverride(true);
+      const promoted: UserSession = { ...currentUser, role: 'admin' };
+      storageService.setCurrentUser(promoted);
+      if (onUpdateCurrentUser) onUpdateCurrentUser(promoted);
+      return;
+    }
+
+    const pass = prompt('Ingresá la clave de PMO (o admin) para habilitar permisos de edición:');
+    if (pass === null) return;
+    const cleanPass = pass.trim();
+    if (
+      cleanPass === 'admin' ||
+      cleanPass === 'pmo' ||
+      cleanPass === '123' ||
+      cleanPass === 'pmo123' ||
+      cleanPass === 'admin123'
+    ) {
+      setPmoOverride(true);
+      const promoted: UserSession = { ...currentUser, role: 'pmo' };
+      storageService.setCurrentUser(promoted);
+      if (onUpdateCurrentUser) onUpdateCurrentUser(promoted);
+      alert('¡Permisos de PMO activados! Ahora podés asignar responsables, cambiar fechas y editar la acción.');
+    } else {
+      alert('Contraseña incorrecta. (Clave estándar: "pmo" o "admin").');
+    }
+  };
 
   const [title, setTitle] = useState<string>(action.title);
   const [responsible, setResponsible] = useState<string>(action.responsible);
@@ -604,7 +650,7 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!effectiveCanEdit) {
+    if (!canEdit) {
       alert(`Permiso denegado: Solo el responsable asignado (${action.responsible}) o el Administrador pueden editar esta acción.`);
       return;
     }
@@ -613,7 +659,7 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
     if (newCommentNote.trim()) {
       updatedComments.push({
         id: `c-${Date.now()}`,
-        author: currentUser?.name || 'Paola Santilli (PMO SAP)',
+        author: currentUser?.name || 'Usuario',
         date: new Date().toISOString().split('T')[0],
         text: newCommentNote.trim(),
       });
@@ -667,8 +713,8 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
         </div>
 
         {/* Permission status banner */}
-        {!effectiveCanEdit ? (
-          <div className="bg-amber-50 border-b border-amber-200 p-3 px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-amber-900">
+        {!canEdit ? (
+          <div className="bg-amber-50 border-b border-amber-200 p-3 px-6 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900">
             <div className="flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
               <p>
@@ -677,39 +723,20 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
             </div>
             <button
               type="button"
-              onClick={() => {
-                setPmoUnlocked(true);
-                const pmoUser: UserSession = {
-                  id: 'usr-psantilli',
-                  name: 'Paola Santilli (PMO SAP)',
-                  username: 'psantilli',
-                  email: 'psantilli@crucianelli.com',
-                  role: 'admin',
-                  area: 'Administración',
-                };
-                storageService.setCurrentUser(pmoUser);
-                if (onSwitchUser) onSwitchUser(pmoUser);
-              }}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer self-start sm:self-auto"
-              title="Habilitar edición de inmediato como PMO"
+              onClick={handleEnablePmo}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+              title="Habilitar permisos de PMO para asignar responsable y editar la acción"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>Soy el PMO (Habilitar Edición)</span>
             </button>
           </div>
         ) : (
-          <div className="bg-emerald-50 border-b border-emerald-200 p-2.5 px-6 flex items-center justify-between gap-2 text-xs text-emerald-900">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>
-                Tenés permisos para editar como <strong>{pmoUnlocked ? 'Paola Santilli (PMO SAP)' : currentUser?.name || 'Usuario'}</strong>{effectiveIsPmo ? ' (Rol PMO activo)' : ''}.
-              </span>
-            </div>
-            {pmoUnlocked && (
-              <span className="text-[10px] bg-emerald-200 text-emerald-950 font-bold px-2 py-0.5 rounded">
-                Modo PMO Activo
-              </span>
-            )}
+          <div className="bg-emerald-50 border-b border-emerald-200 p-2.5 px-6 flex items-center gap-2 text-xs text-emerald-900">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>
+              Tenés permisos para editar como <strong>{currentUser?.name || 'Usuario'}</strong>{isPmo ? ' (Rol PMO activo)' : ''}.
+            </span>
           </div>
         )}
 
@@ -721,14 +748,14 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
                 <Edit3 className="w-3 h-3 text-blue-600" />
                 <span>Acción Definida (Texto / Descripción):</span>
               </label>
-              {effectiveCanEditDefinition && (
+              {canEditDefinition && (
                 <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded shadow-2xs">
-                  {effectiveIsPmo ? 'Edición PMO habilitada' : 'Edición habilitada'}
+                  {isPmo ? 'Edición PMO habilitada' : 'Edición habilitada'}
                 </span>
               )}
             </div>
 
-            {effectiveCanEditDefinition ? (
+            {canEditDefinition ? (
               <div>
                 <textarea
                   rows={2}
@@ -752,7 +779,7 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
               {/* Etapa de origen */}
               <div>
                 <span className="text-[10px] font-bold text-slate-500 block mb-0.5">Etapa de origen:</span>
-                {effectiveIsPmo ? (
+                {isPmo ? (
                   <select
                     value={stageId}
                     onChange={(e) => setStageId(Number(e.target.value))}
@@ -774,14 +801,50 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
               {/* Responsable */}
               <div>
                 <span className="text-[10px] font-bold text-slate-500 block mb-0.5">Responsable:</span>
-                {effectiveIsPmo ? (
-                  <input
-                    type="text"
-                    value={responsible}
-                    onChange={(e) => setResponsible(e.target.value)}
-                    placeholder="Nombre del responsable"
-                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-[11px] font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
+                {isPmo ? (
+                  <div className="space-y-1">
+                    <select
+                      value={responsible}
+                      onChange={(e) => setResponsible(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-[11px] font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    >
+                      <option value="Sin asignar">Sin asignar</option>
+                      {project.team && project.team.length > 0 && (
+                        <optgroup label="Equipo del Proyecto">
+                          {project.team.map((m) => (
+                            <option key={`tm-${m.name}`} value={m.name}>
+                              {m.name} ({m.role})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {allUsers && allUsers.length > 0 && (
+                        <optgroup label="Usuarios Registrados">
+                          {allUsers.map((u) => (
+                            <option key={`usr-${u.id}`} value={u.name}>
+                              {u.name} ({u.area || 'General'})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {responsible &&
+                        responsible !== 'Sin asignar' &&
+                        !(allUsers || []).some((u) => u.name === responsible) &&
+                        !(project.team || []).some((m) => m.name === responsible) && (
+                          <optgroup label="Otro Responsable">
+                            <option value={responsible}>{responsible}</option>
+                          </optgroup>
+                        )}
+                    </select>
+                    <input
+                      type="text"
+                      value={responsible === 'Sin asignar' ? '' : responsible}
+                      onChange={(e) => setResponsible(e.target.value || 'Sin asignar')}
+                      placeholder="O escribir nombre personalizado..."
+                      className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-0.5 text-[10px] text-slate-700 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      title="Podés seleccionar de la lista o escribir un nombre directamente"
+                    />
+                  </div>
                 ) : (
                   <span className="flex items-center gap-1 font-semibold text-slate-700 py-0.5">
                     <User className="w-3.5 h-3.5 text-blue-600" />
