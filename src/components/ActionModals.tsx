@@ -558,8 +558,12 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
   onPreviewFile,
 }) => {
   const isPmo = isPMO(currentUser);
+  const [pmoUnlocked, setPmoUnlocked] = useState<boolean>(false);
+  const effectiveIsPmo = isPmo || pmoUnlocked;
   const canEdit = canUserEditAction(currentUser, action) || isPmo;
+  const effectiveCanEdit = canEdit || pmoUnlocked;
   const canEditDefinition = canUserEditActionDefinition(currentUser, action) || isPmo;
+  const effectiveCanEditDefinition = canEditDefinition || pmoUnlocked;
 
   const [title, setTitle] = useState<string>(action.title);
   const [responsible, setResponsible] = useState<string>(action.responsible);
@@ -600,7 +604,7 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canEdit) {
+    if (!effectiveCanEdit) {
       alert(`Permiso denegado: Solo el responsable asignado (${action.responsible}) o el Administrador pueden editar esta acción.`);
       return;
     }
@@ -609,7 +613,7 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
     if (newCommentNote.trim()) {
       updatedComments.push({
         id: `c-${Date.now()}`,
-        author: currentUser?.name || 'Usuario',
+        author: currentUser?.name || 'Paola Santilli (PMO SAP)',
         date: new Date().toISOString().split('T')[0],
         text: newCommentNote.trim(),
       });
@@ -663,19 +667,49 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
         </div>
 
         {/* Permission status banner */}
-        {!canEdit ? (
-          <div className="bg-amber-50 border-b border-amber-200 p-3 px-6 flex items-center gap-2 text-xs text-amber-900">
-            <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
-            <p>
-              <strong>Modo Sólo Lectura:</strong> Acción asignada a <strong>{action.responsible}</strong>. Solo el responsable asignado y el PMO pueden editarla o adjuntar archivos.
-            </p>
+        {!effectiveCanEdit ? (
+          <div className="bg-amber-50 border-b border-amber-200 p-3 px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-amber-900">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+              <p>
+                <strong>Modo Sólo Lectura:</strong> Acción asignada a <strong>{action.responsible}</strong>.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setPmoUnlocked(true);
+                const pmoUser: UserSession = {
+                  id: 'usr-psantilli',
+                  name: 'Paola Santilli (PMO SAP)',
+                  username: 'psantilli',
+                  email: 'psantilli@crucianelli.com',
+                  role: 'admin',
+                  area: 'Administración',
+                };
+                storageService.setCurrentUser(pmoUser);
+                if (onSwitchUser) onSwitchUser(pmoUser);
+              }}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer self-start sm:self-auto"
+              title="Habilitar edición de inmediato como PMO"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Soy el PMO (Habilitar Edición)</span>
+            </button>
           </div>
         ) : (
-          <div className="bg-emerald-50 border-b border-emerald-200 p-2.5 px-6 flex items-center gap-2 text-xs text-emerald-900">
-            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>
-              Tenés permisos para editar como <strong>{currentUser?.name || 'Usuario'}</strong>{isPmo ? ' (Rol PMO activo)' : ''}.
-            </span>
+          <div className="bg-emerald-50 border-b border-emerald-200 p-2.5 px-6 flex items-center justify-between gap-2 text-xs text-emerald-900">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>
+                Tenés permisos para editar como <strong>{pmoUnlocked ? 'Paola Santilli (PMO SAP)' : currentUser?.name || 'Usuario'}</strong>{effectiveIsPmo ? ' (Rol PMO activo)' : ''}.
+              </span>
+            </div>
+            {pmoUnlocked && (
+              <span className="text-[10px] bg-emerald-200 text-emerald-950 font-bold px-2 py-0.5 rounded">
+                Modo PMO Activo
+              </span>
+            )}
           </div>
         )}
 
@@ -687,14 +721,14 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
                 <Edit3 className="w-3 h-3 text-blue-600" />
                 <span>Acción Definida (Texto / Descripción):</span>
               </label>
-              {canEditDefinition && (
+              {effectiveCanEditDefinition && (
                 <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded shadow-2xs">
-                  {isPmo ? 'Edición PMO habilitada' : 'Edición habilitada'}
+                  {effectiveIsPmo ? 'Edición PMO habilitada' : 'Edición habilitada'}
                 </span>
               )}
             </div>
 
-            {canEditDefinition ? (
+            {effectiveCanEditDefinition ? (
               <div>
                 <textarea
                   rows={2}
@@ -718,7 +752,7 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
               {/* Etapa de origen */}
               <div>
                 <span className="text-[10px] font-bold text-slate-500 block mb-0.5">Etapa de origen:</span>
-                {isPmo ? (
+                {effectiveIsPmo ? (
                   <select
                     value={stageId}
                     onChange={(e) => setStageId(Number(e.target.value))}
@@ -740,7 +774,7 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
               {/* Responsable */}
               <div>
                 <span className="text-[10px] font-bold text-slate-500 block mb-0.5">Responsable:</span>
-                {isPmo ? (
+                {effectiveIsPmo ? (
                   <input
                     type="text"
                     value={responsible}

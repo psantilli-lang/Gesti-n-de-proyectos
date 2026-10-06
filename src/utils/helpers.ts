@@ -131,8 +131,9 @@ export function isUserProjectMember(user?: UserSession | null, project?: SAPProj
  */
 export function isActionAssignedToUser(user?: UserSession | null, action?: StageAction | null): boolean {
   if (!user?.name || !action?.responsible) return false;
-  const cleanUserName = cleanPersonName(user.name);
   const cleanResp = cleanPersonName(action.responsible);
+  if (!cleanResp || cleanResp === 'sin asignar' || cleanResp === 'sin asignar.') return false;
+  const cleanUserName = cleanPersonName(user.name);
   if (cleanUserName.length > 2 && cleanResp.includes(cleanUserName)) return true;
   if (cleanResp.length > 2 && cleanUserName.includes(cleanResp)) return true;
   const uLower = user.name.toLowerCase();
@@ -143,15 +144,11 @@ export function isActionAssignedToUser(user?: UserSession | null, action?: Stage
 /**
  * Check if the active user can edit a specific action.
  * Rule: Las acciones solo las podrán editar las personas que la tienen asignadas y el PMO.
+ * Si una acción está "Sin asignar", solo el PMO puede editarla o asignarle responsable.
  */
 export function canUserEditAction(user?: UserSession | null, action?: StageAction | null): boolean {
   if (!user || !action) return false;
   if (isPMO(user)) return true;
-  // If the action is unassigned ("Sin asignar" or empty), anyone with an active session can edit / assign it
-  const resp = (action.responsible || '').trim().toLowerCase();
-  if (!resp || resp === 'sin asignar' || resp === 'sin asignar.' || resp === 'unassigned') {
-    return true;
-  }
   return isActionAssignedToUser(user, action);
 }
 
@@ -243,7 +240,13 @@ export function canUserEditActionDefinition(
   if (!user) return false;
   if (isPMO(user)) return true;
   if (!action) return false;
-  if (action.createdBy && cleanPersonName(user.name) === cleanPersonName(action.createdBy)) return true;
+  if (
+    action.createdBy &&
+    cleanPersonName(action.createdBy) !== 'sin asignar' &&
+    cleanPersonName(user.name) === cleanPersonName(action.createdBy)
+  ) {
+    return true;
+  }
   return isActionAssignedToUser(user, action);
 }
 
