@@ -487,6 +487,7 @@ export default function App() {
       updatedAt: new Date().toISOString(),
     };
     handleUpdateProject(updatedProject);
+    showToast(`¡Acción actualizada con éxito!`, 'success');
     setActionModalState({ type: null, project: null });
   };
 

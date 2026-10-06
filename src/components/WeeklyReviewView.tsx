@@ -486,7 +486,7 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
     newStatus: 'Pendiente' | 'En proceso' | 'Finalizada'
   ) => {
     if (!canUserEditAction(currentUser, action)) {
-      alert(`Permiso denegado: Solo el responsable asignado (${action.responsible}) o el Administrador pueden modificar esta acción.`);
+      alert(`Permiso denegado: Solo el responsable asignado (${action.responsible}) o el PMO pueden modificar esta acción.`);
       return;
     }
 

@@ -20,7 +20,8 @@ import {
   canUserAccessReportingAndPrioritization, 
   canUserCancelProject, 
   canUserEditProjectMetadata,
-  canUserEditProjectDates
+  canUserEditProjectDates,
+  isPMO
 } from '../utils/helpers';
 import { 
   X, 
@@ -472,19 +473,39 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Código Autogenerado */}
+              {/* Código de Proyecto (Trazabilidad) */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
                   Código de Proyecto (Trazabilidad):
                 </label>
-                <input
-                  type="text"
-                  value={code}
-                  readOnly
-                  className="w-full bg-slate-200/80 border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-800 cursor-not-allowed"
-                />
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    readOnly={!isPMO(currentUser)}
+                    className={`w-full border rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-800 ${
+                      isPMO(currentUser)
+                        ? 'bg-white border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                        : 'bg-slate-200/80 border-slate-300 cursor-not-allowed'
+                    }`}
+                    placeholder="Ej: ProySC-75"
+                  />
+                  {isPMO(currentUser) && (
+                    <button
+                      type="button"
+                      onClick={() => setCode(storageService.generateProjectCode(existingProjects))}
+                      className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition-colors whitespace-nowrap border border-slate-300 cursor-pointer shadow-2xs"
+                      title="Calcular el siguiente correlativo ProySC continuo"
+                    >
+                      Autogenerar
+                    </button>
+                  )}
+                </div>
                 <span className="text-[10px] text-slate-500 mt-0.5 block">
-                  Autogenerado automáticamente
+                  {isPMO(currentUser)
+                    ? 'Código correlativo ProySC continuo (editable por el PMO).'
+                    : 'Autogenerado según correlatividad oficial.'}
                 </span>
               </div>
 

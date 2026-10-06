@@ -655,22 +655,32 @@ export const storageService = {
   },
 
   generateProjectCode(existingProjects: SAPProject[]): string {
-    const year = new Date().getFullYear();
-    const prefix = `SAP-${year}-`;
-    
-    // Find highest existing sequence for this year
+    // Find highest correlative number among all existing ProySC projects to maintain continuous historical traceability
     let maxNum = 0;
+
     existingProjects.forEach((p) => {
-      if (p.code && p.code.startsWith(prefix)) {
-        const numPart = parseInt(p.code.replace(prefix, ''), 10);
-        if (!isNaN(numPart) && numPart > maxNum) {
-          maxNum = numPart;
+      if (!p.code) return;
+      // Extract number from ProySC-1, ProySC-74, PROYSC-12, etc.
+      const match = p.code.match(/(?:ProySC|PROYSC|Proy|SC)[-_]?(\d+)/i);
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      } else {
+        // Fallback: extract standalone numbers
+        const digits = p.code.replace(/\D/g, '');
+        if (digits) {
+          const num = parseInt(digits, 10);
+          if (!isNaN(num) && num > maxNum && num < 10000) {
+            maxNum = num;
+          }
         }
       }
     });
 
-    const nextNum = (maxNum + 1).toString().padStart(3, '0');
-    return `${prefix}${nextNum}`;
+    const nextNum = maxNum > 0 ? maxNum + 1 : 1;
+    return `ProySC-${nextNum}`;
   },
 
   getNextPriorityForArea(existingProjects: SAPProject[], area: string): number {

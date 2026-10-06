@@ -199,7 +199,7 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
   ) => {
     if (!canUserEditAction(currentUser, action)) {
       alert(
-        `Permiso denegado: Solo el responsable asignado (${action.responsible}) o el Administrador pueden modificar esta tarea.`
+        `Permiso denegado: Solo el responsable asignado (${action.responsible}) o el PMO pueden modificar esta tarea.`
       );
       return;
     }

@@ -564,8 +564,9 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
   const [pmoOverride, setPmoOverride] = useState<boolean>(false);
 
   const isPmo = isPMO(currentUser) || pmoOverride;
-  const canEdit = canUserEditAction(currentUser, action) || isPmo;
-  const canEditDefinition = canUserEditActionDefinition(currentUser, action) || isPmo;
+  const canEdit = isPmo || canUserEditAction(currentUser, action);
+  const canEditDefinition = isPmo || canUserEditActionDefinition(currentUser, action);
+  const userOptions = allUsers && allUsers.length > 0 ? allUsers : storageService.getUsers();
 
   const handleEnablePmo = () => {
     // If user's account name or email is already Paola Santilli, auto-promote immediately
@@ -818,9 +819,9 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
                           ))}
                         </optgroup>
                       )}
-                      {allUsers && allUsers.length > 0 && (
+                      {userOptions && userOptions.length > 0 && (
                         <optgroup label="Usuarios Registrados">
-                          {allUsers.map((u) => (
+                          {userOptions.map((u) => (
                             <option key={`usr-${u.id}`} value={u.name}>
                               {u.name} ({u.area || 'General'})
                             </option>
@@ -829,7 +830,7 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
                       )}
                       {responsible &&
                         responsible !== 'Sin asignar' &&
-                        !(allUsers || []).some((u) => u.name === responsible) &&
+                        !userOptions.some((u) => u.name === responsible) &&
                         !(project.team || []).some((m) => m.name === responsible) && (
                           <optgroup label="Otro Responsable">
                             <option value={responsible}>{responsible}</option>

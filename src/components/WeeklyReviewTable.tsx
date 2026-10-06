@@ -339,7 +339,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                           title={
                             canEditAct
                               ? `Cambiar estado de la acción`
-                              : `Solo ${action.responsible} o Admin pueden editar`
+                              : `Solo ${action.responsible} o PMO pueden editar`
                           }
                         >
                           <option value="Pendiente" className="bg-white text-slate-800 font-semibold">
