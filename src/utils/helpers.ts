@@ -175,10 +175,11 @@ export function canUserEditProjectMetadata(user?: UserSession | null, project?: 
 
 /**
  * Check if user can delete a project.
- * Rule: Ningún usuario puede borrar proyectos (garantizado para integridad y trazabilidad de auditoría).
+ * Rule: Solo el PMO puede eliminar definitivamente un proyecto puntual (para purgar pruebas o corregir doble codificación).
  */
-export function canUserDeleteProject(_user?: UserSession | null, _project?: SAPProject | null): boolean {
-  return false;
+export function canUserDeleteProject(user?: UserSession | null, _project?: SAPProject | null): boolean {
+  if (!user) return false;
+  return isPMO(user);
 }
 
 /**

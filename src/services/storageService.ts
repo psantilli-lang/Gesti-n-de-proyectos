@@ -232,6 +232,16 @@ export const storageService = {
     }
   },
 
+  deleteProject(projectId: string): void {
+    try {
+      const current = this.getProjects();
+      const filtered = current.filter((p) => p.id !== projectId);
+      this.saveProjects(filtered);
+    } catch (e) {
+      console.error('Error deleting project from localStorage', e);
+    }
+  },
+
   resetDefaultData(): SAPProject[] {
     this.saveProjects(INITIAL_PROJECTS);
     return INITIAL_PROJECTS;

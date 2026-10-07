@@ -30,8 +30,8 @@ import {
   googleSignIn, 
   googleSignOut 
 } from './services/googleAuthService';
-import { isActionAssignedToUser, isPMO } from './utils/helpers';
-import { Trash2 } from 'lucide-react';
+import { isActionAssignedToUser, isPMO, canUserDeleteProject } from './utils/helpers';
+import { Trash2, X, AlertCircle, ShieldAlert } from 'lucide-react';
 
 export default function App() {
   const [projects, setProjects] = useState<SAPProject[]>(() => storageService.getProjects());
@@ -39,6 +39,8 @@ export default function App() {
   const [usersList, setUsersList] = useState<AppUser[]>(() => storageService.getUsers());
   const [isFirestoreConnected, setIsFirestoreConnected] = useState<boolean>(false);
   const [isClearModalOpen, setIsClearModalOpen] = useState<boolean>(false);
+  const [projectPendingDelete, setProjectPendingDelete] = useState<SAPProject | null>(null);
+  const [isDeletingProject, setIsDeletingProject] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<'weekly' | 'tasks' | 'prioritization' | 'projects' | 'reports'>('weekly');
 
@@ -349,8 +351,63 @@ export default function App() {
     }
   };
 
-  const handleDeleteProject = (_projectId: string) => {
-    alert('Operación no permitida: Por política de integridad y auditoría histórica, ningún usuario tiene permiso para borrar proyectos del sistema.');
+  const handleDeleteProject = (projectId: string) => {
+    if (!canUserDeleteProject(currentUser)) {
+      showToast('Permiso denegado: Solo el PMO tiene autorización para eliminar proyectos.', 'warn');
+      return;
+    }
+
+    const target = projects.find((p) => p.id === projectId || p.code === projectId);
+    if (target) {
+      setProjectPendingDelete(target);
+    } else {
+      setProjectPendingDelete({
+        id: projectId,
+        code: projectId,
+        title: 'Proyecto',
+        area: 'General',
+        state: '01- Pendiente',
+        priority: 1,
+        sapModules: [],
+        schedule: [],
+        actions: [],
+        team: [],
+      });
+    }
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!projectPendingDelete) return;
+    const target = projectPendingDelete;
+    const codeName = `${target.code} - ${target.title}`;
+    setIsDeletingProject(true);
+
+    try {
+      // 1. Immediately delete from local storage & local React state for instantaneous UI responsiveness
+      storageService.deleteProject(target.id);
+      setProjects((prev) => prev.filter((p) => p.id !== target.id && p.code !== target.code));
+      if (selectedProjectForDetail?.id === target.id) {
+        setSelectedProjectForDetail(null);
+      }
+      if (projectToEdit?.id === target.id) {
+        setIsProjectFormOpen(false);
+        setProjectToEdit(null);
+      }
+      setProjectPendingDelete(null);
+      showToast(`Proyecto "${codeName}" eliminado con éxito.`, 'success');
+
+      // 2. Also delete from Firestore
+      try {
+        await firestoreService.deleteProject(target.id);
+      } catch (cloudErr) {
+        console.warn('Firestore sync delete note:', cloudErr);
+      }
+    } catch (err: any) {
+      console.error('Error deleting project:', err);
+      showToast('Error al eliminar el proyecto: ' + (err?.message || ''), 'warn');
+    } finally {
+      setIsDeletingProject(false);
+    }
   };
 
   const handleUserChange = (user: UserSession) => {
@@ -625,6 +682,7 @@ export default function App() {
           onOpenAddAction={(p, stId) => handleOpenAddAction(p, stId)}
           onOpenEditAction={(p, a) => handleOpenEditAction(p, a)}
           onPreviewFile={handlePreviewFile}
+          onDeleteProject={handleDeleteProject}
         />
       )}
 
@@ -640,6 +698,7 @@ export default function App() {
             setProjectToEdit(null);
           }}
           onSave={handleSaveProject}
+          onDeleteProject={handleDeleteProject}
         />
       )}
 
@@ -763,6 +822,77 @@ export default function App() {
                 <Trash2 className="w-4 h-4" />
                 <span>Sí, eliminar proyectos viejos</span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Confirm Delete Single Project */}
+      {projectPendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="p-5 bg-rose-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-white" />
+                <h3 className="text-base font-bold text-white">Eliminar Proyecto Puntual</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProjectPendingDelete(null)}
+                className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs text-slate-700">
+              <p className="text-sm text-slate-800">
+                ¿Confirmás que deseás <strong>eliminar definitivamente</strong> este proyecto?
+              </p>
+
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded bg-blue-900 text-white font-mono text-xs font-bold">
+                    {projectPendingDelete.code}
+                  </span>
+                  <span className="text-slate-500 font-medium">
+                    en {projectPendingDelete.area}
+                  </span>
+                </div>
+                <h4 className="text-sm font-bold text-slate-900">
+                  {projectPendingDelete.title}
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Creado por: <strong>{projectPendingDelete.createdBy || 'Francisco Trillini'}</strong>
+                </p>
+              </div>
+
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <p>
+                  <strong>Atención:</strong> Esta acción borrará el proyecto y todas sus tareas de la base de datos. Es irreversible y resolverá cualquier duplicidad o doble codificación.
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={isDeletingProject}
+                  onClick={() => setProjectPendingDelete(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingProject}
+                  onClick={confirmDeleteProject}
+                  className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>{isDeletingProject ? 'Eliminando...' : 'Sí, Eliminar Proyecto'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

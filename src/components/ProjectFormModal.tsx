@@ -21,6 +21,7 @@ import {
   canUserCancelProject, 
   canUserEditProjectMetadata,
   canUserEditProjectDates,
+  canUserDeleteProject,
   isPMO
 } from '../utils/helpers';
 import { 
@@ -49,6 +50,7 @@ interface ProjectFormModalProps {
   allUsers?: (UserSession | AppUser)[];
   onClose: () => void;
   onSave: (project: SAPProject, options?: { openAddAction?: boolean }) => void;
+  onDeleteProject?: (projectId: string) => void;
 }
 
 export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
@@ -58,6 +60,7 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
   allUsers,
   onClose,
   onSave,
+  onDeleteProject,
 }) => {
   const isEditing = !!projectToEdit;
   const canPrioritize = canUserAccessReportingAndPrioritization(currentUser);
@@ -1204,15 +1207,29 @@ export const ProjectFormModal: React.FC<ProjectFormModalProps> = ({
 
           {/* Form Actions */}
           <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none self-start sm:self-auto">
-              <input
-                type="checkbox"
-                checked={openAddActionAfterSave}
-                onChange={(e) => setOpenAddActionAfterSave(e.target.checked)}
-                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
-              />
-              <span>Abrir ventana para cargar más acciones al guardar</span>
-            </label>
+            <div className="flex items-center gap-3 flex-wrap self-start sm:self-auto">
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={openAddActionAfterSave}
+                  onChange={(e) => setOpenAddActionAfterSave(e.target.checked)}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                />
+                <span>Abrir ventana para cargar más acciones al guardar</span>
+              </label>
+
+              {isEditing && projectToEdit && canUserDeleteProject(currentUser, projectToEdit) && onDeleteProject && (
+                <button
+                  type="button"
+                  onClick={() => onDeleteProject(projectToEdit.id)}
+                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-900 border border-rose-200 font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  title="Eliminar definitivamente este proyecto puntual (Solo PMO)"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Eliminar Proyecto</span>
+                </button>
+              )}
+            </div>
 
             <div className="flex items-center gap-2 self-end sm:self-auto">
               <button

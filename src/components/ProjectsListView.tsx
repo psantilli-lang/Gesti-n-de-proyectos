@@ -13,6 +13,7 @@ import {
   canUserEditProjectDates,
   canUserCancelProject,
   isUserProjectCreator,
+  canUserDeleteProject,
   isPMO,
   formatDateSpanish 
 } from '../utils/helpers';
@@ -23,6 +24,7 @@ import {
   Plus, 
   ExternalLink, 
   Edit3, 
+  Trash2,
   Clock, 
   CheckCircle2, 
   AlertCircle,
@@ -454,6 +456,20 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
                     )}
+                    {canUserDeleteProject(currentUser, project) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          onDeleteProject(project.id);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200 cursor-pointer shadow-2xs"
+                        title="Eliminar definitivamente este proyecto puntual (Solo PMO)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -612,6 +628,20 @@ export const ProjectsListView: React.FC<ProjectsListViewProps> = ({
                               }
                             >
                               <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {canUserDeleteProject(currentUser, project) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                onDeleteProject(project.id);
+                              }}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                              title="Eliminar definitivamente este proyecto puntual (Solo PMO)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>

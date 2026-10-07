@@ -18,6 +18,7 @@ import {
   canUserEditProjectDates,
   canUserAddAction,
   canUserCancelProject,
+  canUserDeleteProject,
   canUserAccessReportingAndPrioritization,
   isPMO,
   isActionOverdue, 
@@ -58,6 +59,7 @@ interface ProjectDetailModalProps {
   onOpenAddAction: (project: SAPProject, defaultStageId?: number) => void;
   onOpenEditAction: (project: SAPProject, action: StageAction) => void;
   onPreviewFile?: (file: AttachedFile, projectTitle?: string) => void;
+  onDeleteProject?: (projectId: string) => void;
 }
 
 export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
@@ -68,6 +70,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
   onOpenAddAction,
   onOpenEditAction,
   onPreviewFile,
+  onDeleteProject,
 }) => {
   const [activeTab, setActiveTab] = useState<'diagnosis' | 'schedule' | 'actions'>('schedule');
   const [selectedStageFilter, setSelectedStageFilter] = useState<number | 'all'>('all');
@@ -393,6 +396,18 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                 >
                   <Mail className="w-3.5 h-3.5 text-blue-400" />
                   <span>{isSendingEmail ? 'Enviando...' : 'Reenviar Mail de Alta'}</span>
+                </button>
+              )}
+
+              {canUserDeleteProject(currentUser, project) && onDeleteProject && (
+                <button
+                  type="button"
+                  onClick={() => onDeleteProject(project.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 hover:text-white border border-rose-500/40 font-semibold transition-colors cursor-pointer text-xs"
+                  title="Eliminar definitivamente este proyecto puntual (Solo PMO)"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Eliminar Proyecto</span>
                 </button>
               )}
             </div>
