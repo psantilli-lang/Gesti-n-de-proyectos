@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Info,
 } from 'lucide-react';
+import { MultiSelectDropdown, MultiSelectOption } from './MultiSelectDropdown';
 
 interface PrioritizationViewProps {
   projects: SAPProject[];
@@ -30,10 +31,12 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
   onUpdateProject,
   onSelectProject,
 }) => {
-  // 3 independent and combined filters
-  const [selectedArea, setSelectedArea] = useState<string>('all');
-  const [selectedState, setSelectedState] = useState<string>('all');
-  const [selectedModule, setSelectedModule] = useState<string>('all');
+  // Multi-select and independent combined filters
+  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  const [selectedStates, setSelectedStates] = useState<string[]>([]);
+  const [selectedModules, setSelectedModules] = useState<string[]>([]);
+  const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
+  const [selectedProjectCodes, setSelectedProjectCodes] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   // Local feedback indicator when a project priority is updated
@@ -48,33 +51,119 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
     return Array.from(areas).sort();
   }, [projects]);
 
+  // Distinct priorities automatically extracted from ALL loaded projects
+  const uniquePriorities = useMemo(() => {
+    const prioritiesSet = new Set<number>();
+    projects.forEach((p) => {
+      if (typeof p.priority === 'number' && !isNaN(p.priority)) {
+        prioritiesSet.add(p.priority);
+      }
+    });
+    return Array.from(prioritiesSet).sort((a, b) => a - b);
+  }, [projects]);
+
   // Available SAP modules list
   const allModules: SAPModule[] = ['PP', 'MM', 'WM', 'QM', 'SD', 'FI', 'CO'];
 
-  // Filter projects according to the 3 combined filters + optional search query
+  // Multi-select options prepared for the dropdowns
+  const areaOptions: MultiSelectOption[] = useMemo(() => {
+    return uniqueAreas.map((area) => ({
+      value: area,
+      label: area,
+      count: projects.filter((p) => p.area === area).length,
+    }));
+  }, [uniqueAreas, projects]);
+
+  const stateOptions: MultiSelectOption[] = useMemo(() => {
+    return ALL_PROJECT_STATES.map((st) => ({
+      value: st,
+      label: st,
+      count: projects.filter((p) => {
+        const pCode = p.state.split('-')[0].trim();
+        const sCode = st.split('-')[0].trim();
+        return p.state === st || (pCode && pCode === sCode);
+      }).length,
+    }));
+  }, [projects]);
+
+  const moduleOptions: MultiSelectOption[] = useMemo(() => {
+    return allModules.map((mod) => {
+      const desc = SAP_MODULES_DATA.find((m) => m.id === mod)?.name || mod;
+      return {
+        value: mod,
+        label: `${mod} - ${desc}`,
+        count: projects.filter((p) => p.sapModules && p.sapModules.includes(mod)).length,
+      };
+    });
+  }, [allModules, projects]);
+
+  const priorityOptions: MultiSelectOption[] = useMemo(() => {
+    return uniquePriorities.map((prio) => ({
+      value: prio.toString(),
+      label: `Prioridad #${prio}`,
+      count: projects.filter((p) => p.priority === prio).length,
+    }));
+  }, [uniquePriorities, projects]);
+
+  const codeOptions: MultiSelectOption[] = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: MultiSelectOption[] = [];
+    projects.forEach((p) => {
+      const code = (p.code || '').trim();
+      if (code && !seen.has(code.toLowerCase())) {
+        seen.add(code.toLowerCase());
+        opts.push({
+          value: code,
+          label: `${code} - ${p.title}`,
+          count: projects.filter((item) => (item.code || '').trim().toLowerCase() === code.toLowerCase()).length,
+        });
+      }
+    });
+    return opts.sort((a, b) => a.value.localeCompare(b.value, undefined, { numeric: true }));
+  }, [projects]);
+
+  // Filter projects according to the combined multi-select filters + optional search query
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
-      // 1. Filter by Area
-      if (selectedArea !== 'all' && project.area !== selectedArea) {
+      // 1. Filter by Area (multi-select)
+      if (selectedAreas.length > 0 && !selectedAreas.includes(project.area)) {
         return false;
       }
 
-      // 2. Filter by State
-      if (selectedState !== 'all') {
+      // 2. Filter by State (multi-select with code matching)
+      if (selectedStates.length > 0) {
         const pCode = project.state.split('-')[0].trim();
-        const sCode = selectedState.split('-')[0].trim();
-        const matches = project.state === selectedState || (pCode && pCode === sCode);
-        if (!matches) return false;
+        const matchesAnyState = selectedStates.some((st) => {
+          const sCode = st.split('-')[0].trim();
+          return project.state === st || (pCode && pCode === sCode);
+        });
+        if (!matchesAnyState) return false;
       }
 
-      // 3. Filter by SAP Module (using project.sapModules)
-      if (selectedModule !== 'all') {
-        if (!project.sapModules || !project.sapModules.includes(selectedModule as SAPModule)) {
-          return false;
-        }
+      // 3. Filter by SAP Module (multi-select)
+      if (selectedModules.length > 0) {
+        const matchesAnyModule = selectedModules.some((mod) =>
+          project.sapModules && project.sapModules.includes(mod as SAPModule)
+        );
+        if (!matchesAnyModule) return false;
       }
 
-      // 4. Search query (code, title, responsible, area)
+      // 4. Filter by Priority (multi-select)
+      if (selectedPriorities.length > 0 && !selectedPriorities.includes(project.priority?.toString())) {
+        return false;
+      }
+
+      // 5. Filter by Project Code / Number (multi-select)
+      if (selectedProjectCodes.length > 0) {
+        const matchesCode = selectedProjectCodes.some((code) => {
+          const cClean = code.trim().toLowerCase();
+          const pClean = (project.code || '').trim().toLowerCase();
+          return cClean === pClean || cClean.replace(/[-\s]/g, '') === pClean.replace(/[-\s]/g, '');
+        });
+        if (!matchesCode) return false;
+      }
+
+      // 6. Search query (code, title, responsible/creator, area)
       if (searchTerm.trim() !== '') {
         const query = searchTerm.toLowerCase();
         const matchesCode = project.code?.toLowerCase().includes(query);
@@ -88,7 +177,7 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
 
       return true;
     });
-  }, [projects, selectedArea, selectedState, selectedModule, searchTerm]);
+  }, [projects, selectedAreas, selectedStates, selectedModules, selectedPriorities, selectedProjectCodes, searchTerm]);
 
   // Sorting configuration
   type SortColumn = 'priority' | 'area' | 'code' | 'title' | 'state';
@@ -137,7 +226,7 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
     const sorted = sortProjects(filteredProjects, sortColumn, sortDirection);
     setOrderedProjectIds(sorted.map((p) => p.id));
     setHasUnsortedChanges(false);
-  }, [selectedArea, selectedState, selectedModule, searchTerm]);
+  }, [selectedAreas, selectedStates, selectedModules, selectedPriorities, selectedProjectCodes, searchTerm]);
 
   // Handler to explicitly sort when user clicks a column header or button
   const handleSortBy = (col: SortColumn) => {
@@ -184,15 +273,19 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
 
   // Check if any filter is active
   const hasActiveFilters =
-    selectedArea !== 'all' ||
-    selectedState !== 'all' ||
-    selectedModule !== 'all' ||
+    selectedAreas.length > 0 ||
+    selectedStates.length > 0 ||
+    selectedModules.length > 0 ||
+    selectedPriorities.length > 0 ||
+    selectedProjectCodes.length > 0 ||
     searchTerm.trim() !== '';
 
   const handleResetFilters = () => {
-    setSelectedArea('all');
-    setSelectedState('all');
-    setSelectedModule('all');
+    setSelectedAreas([]);
+    setSelectedStates([]);
+    setSelectedModules([]);
+    setSelectedPriorities([]);
+    setSelectedProjectCodes([]);
     setSearchTerm('');
   };
 
@@ -263,12 +356,12 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
         </div>
       </div>
 
-      {/* Barra de Filtros (Área, Estado, Módulo SAP) + Búsqueda */}
+      {/* Barra de Filtros (Área, Estado, Prioridad, Módulo SAP, N° Proyecto) + Búsqueda */}
       <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-slate-700 font-semibold text-xs uppercase tracking-wide">
             <Filter className="w-4 h-4 text-blue-600" />
-            <span>Filtros Combinables:</span>
+            <span>Filtros Combinables (Selección Múltiple):</span>
           </div>
 
           {hasActiveFilters && (
@@ -282,101 +375,91 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+        <div className="flex flex-wrap items-center gap-3 pt-1">
           {/* 1. FILTRO POR ÁREA */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
-              1. Área
-            </label>
-            <select
-              value={selectedArea}
-              onChange={(e) => setSelectedArea(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all cursor-pointer"
-            >
-              <option value="all">Todas las Áreas ({projects.length})</option>
-              {uniqueAreas.map((area) => {
-                const count = projects.filter((p) => p.area === area).length;
-                return (
-                  <option key={area} value={area}>
-                    {area} ({count})
-                  </option>
-                );
-              })}
-            </select>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-slate-600">Área:</span>
+            <MultiSelectDropdown
+              label="Filtrar por Área"
+              options={areaOptions}
+              selectedValues={selectedAreas}
+              onChange={setSelectedAreas}
+              allLabel="Todas las Áreas"
+              totalCount={projects.length}
+            />
           </div>
 
           {/* 2. FILTRO POR ESTADO */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
-              2. Estado
-            </label>
-            <select
-              value={selectedState}
-              onChange={(e) => setSelectedState(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all cursor-pointer"
-            >
-              <option value="all">Todos los Estados ({projects.length})</option>
-              {ALL_PROJECT_STATES.map((state) => {
-                const count = projects.filter((p) => {
-                  const pCode = p.state.split('-')[0].trim();
-                  const sCode = state.split('-')[0].trim();
-                  return p.state === state || (pCode && pCode === sCode);
-                }).length;
-                return (
-                  <option key={state} value={state}>
-                    {state} ({count})
-                  </option>
-                );
-              })}
-            </select>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-slate-600">Estado:</span>
+            <MultiSelectDropdown
+              label="Filtrar por Estado"
+              options={stateOptions}
+              selectedValues={selectedStates}
+              onChange={setSelectedStates}
+              allLabel="Todos los Estados"
+              totalCount={projects.length}
+            />
           </div>
 
-          {/* 3. FILTRO POR MÓDULO SAP */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
-              3. Módulo SAP
-            </label>
-            <select
-              value={selectedModule}
-              onChange={(e) => setSelectedModule(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all cursor-pointer"
-            >
-              <option value="all">Todos los Módulos ({projects.length})</option>
-              {allModules.map((mod) => {
-                const count = projects.filter((p) => p.sapModules?.includes(mod)).length;
-                const desc = SAP_MODULES_DATA.find((m) => m.id === mod)?.name || mod;
-                return (
-                  <option key={mod} value={mod}>
-                    {mod} - {desc} ({count})
-                  </option>
-                );
-              })}
-            </select>
+          {/* 3. FILTRO POR PRIORIDAD */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-slate-600">Prioridad:</span>
+            <MultiSelectDropdown
+              label="Filtrar por Prioridad"
+              options={priorityOptions}
+              selectedValues={selectedPriorities}
+              onChange={setSelectedPriorities}
+              allLabel="Todas"
+              totalCount={projects.length}
+            />
           </div>
 
-          {/* 4. BÚSQUEDA RÁPIDA */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">
-              Búsqueda
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Código, título, líder..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-              />
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-2 text-xs text-slate-400 hover:text-slate-600 font-bold"
-                >
-                  ×
-                </button>
-              )}
-            </div>
+          {/* 4. FILTRO POR MÓDULO SAP */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-slate-600">Módulo SAP:</span>
+            <MultiSelectDropdown
+              label="Filtrar por Módulo SAP"
+              options={moduleOptions}
+              selectedValues={selectedModules}
+              onChange={setSelectedModules}
+              allLabel="Todos los Módulos"
+              totalCount={projects.length}
+            />
+          </div>
+
+          {/* 5. FILTRO POR N° PROYECTO */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-slate-600">N° Proyecto:</span>
+            <MultiSelectDropdown
+              label="Filtrar por N° Proyecto"
+              options={codeOptions}
+              selectedValues={selectedProjectCodes}
+              onChange={setSelectedProjectCodes}
+              allLabel="Todos los N°"
+              totalCount={projects.length}
+            />
+          </div>
+
+          {/* BÚSQUEDA RÁPIDA */}
+          <div className="relative min-w-[200px] flex-1 max-w-xs">
+            <input
+              type="text"
+              placeholder="Buscar código, título, líder..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-7 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all placeholder-slate-400"
+            />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1.5 text-xs text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
+                title="Limpiar búsqueda"
+              >
+                ×
+              </button>
+            )}
           </div>
         </div>
 
@@ -384,34 +467,89 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 text-xs">
             <span className="text-[11px] text-slate-500 font-medium">Activos:</span>
-            {selectedArea !== 'all' && (
-              <span className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-800 px-2 py-0.5 rounded-md font-semibold text-[11px]">
-                Área: {selectedArea}
-                <button onClick={() => setSelectedArea('all')} className="hover:text-blue-950 font-bold ml-0.5">
+            {selectedAreas.map((area) => (
+              <span
+                key={`area-${area}`}
+                className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-800 px-2 py-0.5 rounded-md font-semibold text-[11px]"
+              >
+                Área: {area}
+                <button
+                  onClick={() => setSelectedAreas(selectedAreas.filter((a) => a !== area))}
+                  className="hover:text-blue-950 font-bold ml-0.5 cursor-pointer"
+                  title="Quitar filtro"
+                >
                   ×
                 </button>
               </span>
-            )}
-            {selectedState !== 'all' && (
-              <span className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-md font-semibold text-[11px]">
-                Estado: {selectedState}
-                <button onClick={() => setSelectedState('all')} className="hover:text-indigo-950 font-bold ml-0.5">
+            ))}
+            {selectedStates.map((st) => (
+              <span
+                key={`state-${st}`}
+                className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-md font-semibold text-[11px]"
+              >
+                Estado: {st}
+                <button
+                  onClick={() => setSelectedStates(selectedStates.filter((s) => s !== st))}
+                  className="hover:text-indigo-950 font-bold ml-0.5 cursor-pointer"
+                  title="Quitar filtro"
+                >
                   ×
                 </button>
               </span>
-            )}
-            {selectedModule !== 'all' && (
-              <span className="inline-flex items-center gap-1 bg-cyan-50 border border-cyan-200 text-cyan-800 px-2 py-0.5 rounded-md font-semibold text-[11px]">
-                Módulo: {selectedModule}
-                <button onClick={() => setSelectedModule('all')} className="hover:text-cyan-950 font-bold ml-0.5">
+            ))}
+            {selectedPriorities.map((prio) => (
+              <span
+                key={`prio-${prio}`}
+                className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-800 px-2 py-0.5 rounded-md font-semibold text-[11px]"
+              >
+                Prioridad #{prio}
+                <button
+                  onClick={() => setSelectedPriorities(selectedPriorities.filter((p) => p !== prio))}
+                  className="hover:text-amber-950 font-bold ml-0.5 cursor-pointer"
+                  title="Quitar filtro"
+                >
                   ×
                 </button>
               </span>
-            )}
+            ))}
+            {selectedModules.map((mod) => (
+              <span
+                key={`mod-${mod}`}
+                className="inline-flex items-center gap-1 bg-cyan-50 border border-cyan-200 text-cyan-800 px-2 py-0.5 rounded-md font-semibold text-[11px]"
+              >
+                Módulo: {mod}
+                <button
+                  onClick={() => setSelectedModules(selectedModules.filter((m) => m !== mod))}
+                  className="hover:text-cyan-950 font-bold ml-0.5 cursor-pointer"
+                  title="Quitar filtro"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            {selectedProjectCodes.map((code) => (
+              <span
+                key={`code-${code}`}
+                className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-800 px-2 py-0.5 rounded-md font-semibold text-[11px]"
+              >
+                N°: {code}
+                <button
+                  onClick={() => setSelectedProjectCodes(selectedProjectCodes.filter((c) => c !== code))}
+                  className="hover:text-emerald-950 font-bold ml-0.5 cursor-pointer"
+                  title="Quitar filtro"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
             {searchTerm.trim() !== '' && (
-              <span className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-800 px-2 py-0.5 rounded-md font-semibold text-[11px]">
+              <span className="inline-flex items-center gap-1 bg-slate-100 border border-slate-300 text-slate-800 px-2 py-0.5 rounded-md font-semibold text-[11px]">
                 "{searchTerm}"
-                <button onClick={() => setSearchTerm('')} className="hover:text-amber-950 font-bold ml-0.5">
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="hover:text-slate-950 font-bold ml-0.5 cursor-pointer"
+                  title="Quitar búsqueda"
+                >
                   ×
                 </button>
               </span>
