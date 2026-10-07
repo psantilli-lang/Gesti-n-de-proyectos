@@ -9,8 +9,7 @@ import {
   AlertCircle, 
   Layers, 
   ShieldAlert,
-  Info,
-  Key
+  Info
 } from 'lucide-react';
 import { UserSession, SAP_MODULES_DATA } from '../types/project';
 import { storageService } from '../services/storageService';
@@ -106,20 +105,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     } finally {
       setIsGoogleLoading(false);
     }
-  };
-
-  const autofillAdmin = () => {
-    setIdentifier('admin');
-    setPassword('admin');
-    setErrorMsg(null);
-    setSuccessMsg('Credenciales de Administrador cargadas (admin / admin). Hacé clic en "Ingresar al Sistema".');
-  };
-
-  const autofillPMO = () => {
-    setIdentifier('pmo');
-    setPassword('pmo');
-    setErrorMsg(null);
-    setSuccessMsg('Credenciales de PMO cargadas (pmo / pmo). Hacé clic en "Ingresar al Sistema".');
   };
 
   return (
@@ -273,33 +258,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 </div>
               </div>
 
-              {/* QUICK ADMIN AUTOFILL HELPER */}
-              <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-200 flex items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2 text-blue-900">
-                  <Key className="w-4 h-4 text-blue-600 shrink-0" />
-                  <div>
-                    <span className="font-semibold block text-slate-800">¿Acceso inicial como Administrador?</span>
-                    <span className="text-[11px] text-slate-600">Usuario: <strong>admin</strong> | Clave: <strong>admin</strong></span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={autofillAdmin}
-                    className="px-2.5 py-1 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-2xs transition-all cursor-pointer"
-                  >
-                    admin
-                  </button>
-                  <button
-                    type="button"
-                    onClick={autofillPMO}
-                    className="px-2.5 py-1 text-[11px] font-bold bg-slate-700 hover:bg-slate-800 text-white rounded-lg shadow-2xs transition-all cursor-pointer"
-                  >
-                    pmo
-                  </button>
-                </div>
-              </div>
-
               {/* LOGIN FORM */}
               <form onSubmit={handleLogin} className="space-y-4 pt-1">
                 <div>
@@ -313,7 +271,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                       required
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
-                      placeholder="admin, pmo o tu usuario/correo"
+                      placeholder="Ingresá tu usuario o correo corporativo"
                       className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     />
                   </div>
