@@ -214,7 +214,8 @@ export const firestoreService = {
         console.warn('Action merge safety note:', checkErr);
       }
 
-      await setDoc(docRef, projectToSave, { merge: true });
+      const cleanProject = JSON.parse(JSON.stringify(projectToSave));
+      await setDoc(docRef, cleanProject, { merge: true });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `projects/${project.id}`);
     }
@@ -229,7 +230,7 @@ export const firestoreService = {
       const batch = writeBatch(db);
       projects.forEach((p) => {
         const docRef = doc(db, 'projects', p.id);
-        batch.set(docRef, p);
+        batch.set(docRef, JSON.parse(JSON.stringify(p)));
       });
       await batch.commit();
     } catch (error) {
