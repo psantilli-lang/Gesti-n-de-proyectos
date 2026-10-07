@@ -5,6 +5,7 @@ import {
   deleteDoc,
   onSnapshot,
   getDocs,
+  getDoc,
   writeBatch,
 } from 'firebase/firestore';
 import { db, auth, ensureFirebaseAuth } from './firebase';
@@ -173,7 +174,47 @@ export const firestoreService = {
     try {
       await ensureFirebaseAuth();
       const docRef = doc(db, 'projects', project.id);
-      await setDoc(docRef, project, { merge: true });
+      
+      // Safety check: ensure remote actions are not wiped by a stale client
+      let projectToSave = { ...project };
+      try {
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const remoteData = snap.data() as SAPProject;
+          if (remoteData.actions && remoteData.actions.length > 0) {
+            const localActionMap = new Map((projectToSave.actions || []).map((a) => [a.id, a]));
+            let hasNewRemoteActions = false;
+            remoteData.actions.forEach((remoteAct) => {
+              const localAct = localActionMap.get(remoteAct.id);
+              if (!localAct) {
+                localActionMap.set(remoteAct.id, remoteAct);
+                hasNewRemoteActions = true;
+              } else {
+                // If remote has newer comments or attachments, preserve them
+                if (
+                  (remoteAct.commentsHistory?.length || 0) > (localAct.commentsHistory?.length || 0) ||
+                  (remoteAct.attachments?.length || 0) > (localAct.attachments?.length || 0)
+                ) {
+                  localActionMap.set(remoteAct.id, {
+                    ...localAct,
+                    commentsHistory: remoteAct.commentsHistory || localAct.commentsHistory,
+                    attachments: remoteAct.attachments || localAct.attachments,
+                  });
+                  hasNewRemoteActions = true;
+                }
+              }
+            });
+            if (hasNewRemoteActions) {
+              projectToSave.actions = Array.from(localActionMap.values());
+            }
+          }
+        }
+      } catch (checkErr) {
+        // Non-blocking fallback
+        console.warn('Action merge safety note:', checkErr);
+      }
+
+      await setDoc(docRef, projectToSave, { merge: true });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `projects/${project.id}`);
     }
