@@ -256,8 +256,9 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
       }
     }
 
+    const currentLatest = projects.find((p) => p.id === project.id) || project;
     const updated: SAPProject = {
-      ...project,
+      ...currentLatest,
       state: newState,
       updatedAt: new Date().toISOString(),
     };
@@ -272,8 +273,10 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
     }
     if (isNaN(newPriorityVal) || newPriorityVal < 1) return;
     if (project.priority === newPriorityVal) return;
+
+    const currentLatest = projects.find((p) => p.id === project.id) || project;
     const updated: SAPProject = {
-      ...project,
+      ...currentLatest,
       priority: newPriorityVal,
       updatedAt: new Date().toISOString(),
     };
@@ -291,19 +294,21 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
       return;
     }
 
-    const updatedActions = project.actions.map((act) => {
+    const currentLatest = projects.find((p) => p.id === project.id) || project;
+    const updatedActions = currentLatest.actions.map((act) => {
       if (act.id === action.id) {
         return {
           ...act,
           status: newStatus,
           completedAt: newStatus === 'Finalizada' ? new Date().toISOString() : act.completedAt,
+          updatedAt: new Date().toISOString(),
         };
       }
       return act;
     });
 
     onUpdateProject({
-      ...project,
+      ...currentLatest,
       actions: updatedActions,
       updatedAt: new Date().toISOString(),
     });

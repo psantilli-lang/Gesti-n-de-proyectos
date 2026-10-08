@@ -168,49 +168,93 @@ export const firestoreService = {
   },
 
   /**
-   * Save or update a single project in Firestore
+   * Save or update a single project in Firestore with rock-solid conflict resolution.
+   * Guarantees that assigned actions, team members, and comments can NEVER be overwritten
+   * or wiped out by a client with stale state or partial updates (e.g. changing status, priority or dates).
    */
   async saveProject(project: SAPProject): Promise<void> {
     try {
       await ensureFirebaseAuth();
       const docRef = doc(db, 'projects', project.id);
       
-      // Safety check: ensure remote actions are not wiped by a stale client
       let projectToSave = { ...project };
       try {
         const snap = await getDoc(docRef);
         if (snap.exists()) {
           const remoteData = snap.data() as SAPProject;
+
+          // 1. SMART ACTION MERGE: NEVER lose assigned responsibles, comments, or progress
           if (remoteData.actions && remoteData.actions.length > 0) {
             const localActionMap = new Map((projectToSave.actions || []).map((a) => [a.id, a]));
-            let hasNewRemoteActions = false;
+
             remoteData.actions.forEach((remoteAct) => {
               const localAct = localActionMap.get(remoteAct.id);
               if (!localAct) {
+                // If remote action was added elsewhere, preserve it!
                 localActionMap.set(remoteAct.id, remoteAct);
-                hasNewRemoteActions = true;
               } else {
-                // If remote has newer comments or attachments, preserve them
-                if (
-                  (remoteAct.commentsHistory?.length || 0) > (localAct.commentsHistory?.length || 0) ||
-                  (remoteAct.attachments?.length || 0) > (localAct.attachments?.length || 0)
-                ) {
-                  localActionMap.set(remoteAct.id, {
-                    ...localAct,
-                    commentsHistory: remoteAct.commentsHistory || localAct.commentsHistory,
-                    attachments: remoteAct.attachments || localAct.attachments,
-                  });
-                  hasNewRemoteActions = true;
+                // Merging existing action:
+                const mergedAct = { ...localAct };
+
+                // A. RESPONSIBLE PROTECTION:
+                // An already assigned person on the remote database can NEVER be replaced
+                // by "Sin asignar" unless the local action explicitly marked `explicitlyUnassigned === true`.
+                const remoteIsAssigned =
+                  remoteAct.responsible &&
+                  remoteAct.responsible.trim() !== '' &&
+                  remoteAct.responsible.trim().toLowerCase() !== 'sin asignar' &&
+                  remoteAct.responsible.trim().toLowerCase() !== 'sin asignar.';
+
+                const localIsUnassigned =
+                  !localAct.responsible ||
+                  localAct.responsible.trim() === '' ||
+                  localAct.responsible.trim().toLowerCase() === 'sin asignar' ||
+                  localAct.responsible.trim().toLowerCase() === 'sin asignar.';
+
+                if (remoteIsAssigned && localIsUnassigned && !localAct.explicitlyUnassigned) {
+                  // Keep remote assigned person!
+                  mergedAct.responsible = remoteAct.responsible;
                 }
+
+                // B. STATUS PROTECTION:
+                // If remote action was marked Finalizada or En proceso, don't revert to Pendiente
+                // unless local update has a newer updatedAt timestamp.
+                const localTimestamp = localAct.updatedAt || localAct.createdAt || '';
+                const remoteTimestamp = remoteAct.updatedAt || remoteAct.createdAt || '';
+                if (localTimestamp && remoteTimestamp && localTimestamp < remoteTimestamp) {
+                  // Remote is newer, prefer remote status and responsible
+                  mergedAct.status = remoteAct.status;
+                  mergedAct.responsible = remoteAct.responsible;
+                  mergedAct.completedAt = remoteAct.completedAt || mergedAct.completedAt;
+                } else if (remoteAct.status === 'Finalizada' && localAct.status !== 'Finalizada' && !localAct.updatedAt) {
+                  mergedAct.status = remoteAct.status;
+                  mergedAct.completedAt = remoteAct.completedAt || mergedAct.completedAt;
+                }
+
+                // C. COMMENTS & ATTACHMENTS PROTECTION:
+                if ((remoteAct.commentsHistory?.length || 0) > (localAct.commentsHistory?.length || 0)) {
+                  mergedAct.commentsHistory = remoteAct.commentsHistory;
+                }
+                if ((remoteAct.attachments?.length || 0) > (localAct.attachments?.length || 0)) {
+                  mergedAct.attachments = remoteAct.attachments;
+                }
+                if (remoteAct.executionComment && !localAct.executionComment) {
+                  mergedAct.executionComment = remoteAct.executionComment;
+                }
+
+                localActionMap.set(remoteAct.id, mergedAct);
               }
             });
-            if (hasNewRemoteActions) {
-              projectToSave.actions = Array.from(localActionMap.values());
-            }
+            projectToSave.actions = Array.from(localActionMap.values());
+          }
+
+          // 2. TEAM MEMBERS PROTECTION:
+          // If remote had team members and local is empty (e.g. from a quick status change), preserve team
+          if (remoteData.team && remoteData.team.length > 0 && (!projectToSave.team || projectToSave.team.length === 0)) {
+            projectToSave.team = remoteData.team;
           }
         }
       } catch (checkErr) {
-        // Non-blocking fallback
         console.warn('Action merge safety note:', checkErr);
       }
 

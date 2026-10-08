@@ -37,6 +37,7 @@ import {
   isActionDueSoon,
   isActionAssignedToUser,
   canUserEditAction,
+  cleanPersonName,
 } from '../utils/helpers';
 
 interface PendingTasksViewProps {
@@ -103,10 +104,25 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
     return list;
   }, [projects, currentUser]);
 
-  // Tasks filtered by the selected user (My tasks, Specific user, or All)
+  // Count of unassigned tasks
+  const unassignedTasksCount = useMemo(() => {
+    return allTasksWithProject.filter((t) => {
+      if (t.action.status === 'Finalizada') return false;
+      const clean = cleanPersonName(t.action.responsible);
+      return !clean || clean === 'sin asignar' || clean === 'sin asignar.';
+    }).length;
+  }, [allTasksWithProject]);
+
+  // Tasks filtered by the selected user (My tasks, Specific user, Unassigned, or All)
   const userFilteredTasks = useMemo(() => {
     if (selectedUserFilter === 'my-tasks') {
       return allTasksWithProject.filter((t) => t.isAssignedToCurrentUser);
+    }
+    if (selectedUserFilter === 'unassigned') {
+      return allTasksWithProject.filter((t) => {
+        const clean = cleanPersonName(t.action.responsible);
+        return !clean || clean === 'sin asignar' || clean === 'sin asignar.';
+      });
     }
     if (selectedUserFilter === 'all') {
       return allTasksWithProject;
@@ -121,23 +137,22 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
     );
   }, [allTasksWithProject, selectedUserFilter, allUsers]);
 
-  // KPIs for the current user's tasks
+  // KPIs for the active scope's tasks
   const kpis = useMemo(() => {
-    const myTasks = allTasksWithProject.filter((t) => t.isAssignedToCurrentUser);
-    const myPending = myTasks.filter((t) => t.action.status !== 'Finalizada');
-    const myInProgress = myTasks.filter((t) => t.action.status === 'En proceso');
-    const myOverdue = myPending.filter((t) => t.isOverdue);
-    const myDueSoon = myPending.filter((t) => t.isDueSoon);
-    const myCompleted = myTasks.filter((t) => t.action.status === 'Finalizada');
+    const scopePending = userFilteredTasks.filter((t) => t.action.status !== 'Finalizada');
+    const scopeInProgress = userFilteredTasks.filter((t) => t.action.status === 'En proceso');
+    const scopeOverdue = scopePending.filter((t) => t.isOverdue);
+    const scopeDueSoon = scopePending.filter((t) => t.isDueSoon);
+    const scopeCompleted = userFilteredTasks.filter((t) => t.action.status === 'Finalizada');
 
     return {
-      totalPending: myPending.length,
-      inProgress: myInProgress.length,
-      overdue: myOverdue.length,
-      dueSoon: myDueSoon.length,
-      completed: myCompleted.length,
+      totalPending: scopePending.length,
+      inProgress: scopeInProgress.length,
+      overdue: scopeOverdue.length,
+      dueSoon: scopeDueSoon.length,
+      completed: scopeCompleted.length,
     };
-  }, [allTasksWithProject]);
+  }, [userFilteredTasks]);
 
   // Apply search, area and status filters
   const filteredTasks = useMemo(() => {
@@ -249,6 +264,8 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
                 <h1 className="text-xl font-bold text-slate-900">
                   {selectedUserFilter === 'my-tasks'
                     ? 'Mis Tareas Pendientes'
+                    : selectedUserFilter === 'unassigned'
+                    ? 'Acciones Pendientes Sin Asignar'
                     : selectedUserFilter === 'all'
                     ? 'Todas las Tareas del Equipo'
                     : `Tareas de ${selectedUserFilter}`}
@@ -279,6 +296,7 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
               className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
             >
               <option value="my-tasks">👤 Mis tareas ({currentUser?.name || 'Actual'})</option>
+              <option value="unassigned">⚠️ Acciones sin asignar ({unassignedTasksCount})</option>
               <option value="all">👥 Todos los responsables ({allTasksWithProject.filter((t) => t.action.status !== 'Finalizada').length} pendientes)</option>
               <optgroup label="Filtrar por Responsable:">
                 {allUsers.map((u) => (
@@ -302,7 +320,13 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
             </div>
             <div className="mt-1 flex items-baseline gap-1.5">
               <span className="text-2xl font-black text-slate-900">{kpis.totalPending}</span>
-              <span className="text-[11px] text-slate-500 font-medium">asignadas a ti</span>
+              <span className="text-[11px] text-slate-500 font-medium">
+                {selectedUserFilter === 'my-tasks'
+                  ? 'asignadas a ti'
+                  : selectedUserFilter === 'unassigned'
+                  ? 'por asignar'
+                  : 'en este filtro'}
+              </span>
             </div>
           </div>
 

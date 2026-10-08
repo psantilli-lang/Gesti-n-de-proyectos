@@ -675,6 +675,7 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
     const matchedStage = PROJECT_STAGES.find((s) => s.id === stageId);
     const finalStageName = matchedStage ? matchedStage.name : action.stageName;
 
+    const isExplicitlyUnassigned = finalResponsible === 'Sin asignar' || finalResponsible.trim() === '';
     const updatedAction: StageAction = {
       ...action,
       title: finalTitle,
@@ -687,6 +688,8 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
       completedAt: status === 'Finalizada' ? (action.completedAt || new Date().toISOString()) : undefined,
       commentsHistory: updatedComments,
       attachments,
+      updatedAt: new Date().toISOString(),
+      explicitlyUnassigned: isExplicitlyUnassigned,
     };
 
     onSaveAction(updatedAction);

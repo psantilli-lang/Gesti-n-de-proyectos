@@ -294,8 +294,9 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
     if (isNaN(newPriorityVal) || newPriorityVal < 1) return;
     if (project.priority === newPriorityVal) return;
 
+    const currentLatest = projects.find((p) => p.id === project.id) || project;
     const updatedProject: SAPProject = {
-      ...project,
+      ...currentLatest,
       priority: newPriorityVal,
       updatedAt: new Date().toISOString(),
     };

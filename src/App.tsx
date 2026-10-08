@@ -251,9 +251,11 @@ export default function App() {
 
   // Keep state in sync with localStorage and Firestore
   const handleUpdateProject = (updated: SAPProject) => {
-    const updatedList = projects.map((p) => (p.id === updated.id ? updated : p));
-    setProjects(updatedList);
-    storageService.saveProjects(updatedList);
+    setProjects((prev) => {
+      const updatedList = prev.map((p) => (p.id === updated.id ? updated : p));
+      storageService.saveProjects(updatedList);
+      return updatedList;
+    });
     firestoreService.saveProject(updated).catch((e) => console.warn('Firestore saveProject error:', e));
 
     // Keep active detail modal in sync
@@ -267,15 +269,16 @@ export default function App() {
     options?: { openAddAction?: boolean }
   ) => {
     const exists = projects.some((p) => p.id === savedProject.id);
-    let updatedList: SAPProject[];
-    if (exists) {
-      updatedList = projects.map((p) => (p.id === savedProject.id ? savedProject : p));
-    } else {
-      updatedList = [savedProject, ...projects];
-    }
-
-    setProjects(updatedList);
-    storageService.saveProjects(updatedList);
+    setProjects((prev) => {
+      let updatedList: SAPProject[];
+      if (exists) {
+        updatedList = prev.map((p) => (p.id === savedProject.id ? savedProject : p));
+      } else {
+        updatedList = [savedProject, ...prev];
+      }
+      storageService.saveProjects(updatedList);
+      return updatedList;
+    });
     firestoreService.saveProject(savedProject).catch((e) => console.warn('Firestore saveProject error:', e));
     setIsProjectFormOpen(false);
     setProjectToEdit(null);
@@ -470,10 +473,15 @@ export default function App() {
 
   const handleSaveNewAction = (newAction: StageAction, keepOpen?: boolean) => {
     if (!actionModalState.project) return;
-    const project = actionModalState.project;
+    const projectId = actionModalState.project.id;
+    const project = projects.find((p) => p.id === projectId) || actionModalState.project;
+    const actionWithTimestamp: StageAction = {
+      ...newAction,
+      updatedAt: new Date().toISOString(),
+    };
     const updatedProject: SAPProject = {
       ...project,
-      actions: [...project.actions, newAction],
+      actions: [...project.actions, actionWithTimestamp],
       updatedAt: new Date().toISOString(),
     };
     handleUpdateProject(updatedProject);
@@ -534,7 +542,8 @@ export default function App() {
 
   const handleSaveEditedAction = (updatedAction: StageAction) => {
     if (!actionModalState.project) return;
-    const project = actionModalState.project;
+    const projectId = actionModalState.project.id;
+    const project = projects.find((p) => p.id === projectId) || actionModalState.project;
     const prevAction = project.actions.find((a) => a.id === updatedAction.id);
     const updatedActions = project.actions.map((a) =>
       a.id === updatedAction.id ? updatedAction : a

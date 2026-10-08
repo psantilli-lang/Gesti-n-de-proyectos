@@ -86,6 +86,8 @@ export interface StageAction {
   createdAt: string;
   createdBy?: string;
   attachments?: AttachedFile[];
+  updatedAt?: string;
+  explicitlyUnassigned?: boolean;
 }
 
 export interface StageSchedule {
