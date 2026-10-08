@@ -351,6 +351,45 @@ export default function App() {
           }
         });
       }
+    } else {
+      // Existing project updated in ProjectFormModal:
+      // Send notifications for any new actions or actions reassigned to a new responsible
+      const prevProject = projects.find((p) => p.id === savedProject.id);
+      const token = getAccessToken();
+      const sender = getCurrentGoogleUser()?.email || currentUser?.email || undefined;
+
+      const newOrReassignedActions = (savedProject.actions || []).filter((act) => {
+        if (!act.responsible || act.responsible === 'Sin asignar') return false;
+        const prevAct = prevProject?.actions?.find((a) => a.id === act.id);
+        if (!prevAct) return true; // Newly added action in modal
+        return prevAct.responsible !== act.responsible; // Reassigned
+      });
+
+      newOrReassignedActions.forEach((act) => {
+        const actRecipient = emailNotificationService.resolveUserEmail(
+          act.responsible,
+          savedProject,
+          usersList
+        );
+        if (actRecipient) {
+          emailNotificationService
+            .sendNewActionNotification({
+              project: savedProject,
+              action: act,
+              accessToken: token,
+              senderEmail: sender,
+              allUsers: usersList,
+            })
+            .then((log) => {
+              if (log.status === 'sent') {
+                showToast(`✉️ Notificación enviada a ${act.responsible} (${actRecipient}).`, 'success');
+              } else {
+                console.warn('Fallo al enviar acción en proyecto existente:', log.error);
+              }
+            })
+            .catch((err) => console.warn('Error enviando acción:', err));
+        }
+      });
     }
   };
 
