@@ -535,6 +535,7 @@ export default function App() {
   const handleSaveEditedAction = (updatedAction: StageAction) => {
     if (!actionModalState.project) return;
     const project = actionModalState.project;
+    const prevAction = project.actions.find((a) => a.id === updatedAction.id);
     const updatedActions = project.actions.map((a) =>
       a.id === updatedAction.id ? updatedAction : a
     );
@@ -546,6 +547,44 @@ export default function App() {
     handleUpdateProject(updatedProject);
     showToast(`¡Acción actualizada con éxito!`, 'success');
     setActionModalState({ type: null, project: null });
+
+    // If responsible changed to an actual person, trigger notification circuit
+    const responsibleChanged =
+      updatedAction.responsible &&
+      updatedAction.responsible !== 'Sin asignar' &&
+      (!prevAction || prevAction.responsible !== updatedAction.responsible);
+
+    if (responsibleChanged) {
+      const recipientEmail = emailNotificationService.resolveUserEmail(
+        updatedAction.responsible,
+        project,
+        usersList
+      );
+
+      if (recipientEmail) {
+        const token = getAccessToken();
+        const sender = getCurrentGoogleUser()?.email || currentUser?.email || 'notificaciones@crucianelli.com';
+
+        emailNotificationService
+          .sendNewActionNotification({
+            project: updatedProject,
+            action: updatedAction,
+            accessToken: token,
+            senderEmail: sender,
+            allUsers: usersList,
+          })
+          .then((log) => {
+            if (log.status === 'sent') {
+              showToast(`✉️ Notificación enviada con éxito a ${updatedAction.responsible} (${recipientEmail}).`, 'success');
+            } else if (!token) {
+              showToast(`ℹ️ Acción asignada a ${updatedAction.responsible} (${recipientEmail}).`, 'info');
+            } else {
+              showToast(`⚠️ No se pudo enviar el correo a ${recipientEmail}: ${log.error || 'Error de envío'}.`, 'warn');
+            }
+          })
+          .catch((err) => console.warn('Error en notificación de reasignación:', err));
+      }
+    }
   };
 
   const handleDeleteAction = (_actionId: string) => {
