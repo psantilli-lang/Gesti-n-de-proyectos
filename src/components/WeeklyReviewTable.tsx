@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   SAPProject, 
   StageAction, 
@@ -15,7 +15,8 @@ import {
   canUserCancelProject,
   canUserAccessReportingAndPrioritization,
   isActionOverdue,
-  isActionDueSoon
+  isActionDueSoon,
+  getActionCommentsHistory
 } from '../utils/helpers';
 import { 
   ExternalLink, 
@@ -25,6 +26,10 @@ import {
   User, 
   Paperclip,
   Edit3,
+  Calendar,
+  History,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface WeeklyReviewTableProps {
@@ -53,6 +58,19 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
   onActionStatusChange,
 }) => {
   const canPrioritize = canUserAccessReportingAndPrioritization(currentUser);
+  const [expandedCommentActionIds, setExpandedCommentActionIds] = useState<Set<string>>(new Set());
+
+  const toggleCommentsExpanded = (actionId: string) => {
+    setExpandedCommentActionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(actionId)) {
+        next.delete(actionId);
+      } else {
+        next.add(actionId);
+      }
+      return next;
+    });
+  };
 
   if (projects.length === 0) {
     return (
@@ -358,47 +376,114 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     </td>
 
                     {/* 10. Comentario / Avance */}
-                    <td className="py-2 px-2.5 border-r border-slate-200 align-top">
-                      {action ? (
-                        <div className="space-y-1">
-                          {action.executionComment ? (
-                            <p className="text-[10.5px] text-slate-800 italic leading-snug line-clamp-2" title={action.executionComment}>
-                              "{action.executionComment}"
-                            </p>
-                          ) : (
-                            <span className="text-[10px] text-slate-400 italic block">
-                              Sin comentarios.
-                            </span>
-                          )}
+                    <td className="py-2 px-2.5 border-r border-slate-200 align-top min-w-[200px] max-w-[280px]">
+                      {action ? (() => {
+                        const comments = getActionCommentsHistory(action);
+                        const isExpanded = expandedCommentActionIds.has(action.id);
+                        const latestComment = comments.length > 0 ? comments[comments.length - 1] : null;
 
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => onOpenEditAction(project, action)}
-                              className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                            >
-                              <MessageSquare className="w-2.5 h-2.5" />
-                              <span>{canEditAct ? 'Comentar' : 'Ver'}</span>
-                            </button>
+                        return (
+                          <div className="space-y-1.5">
+                            {comments.length === 0 ? (
+                              <span className="text-[10px] text-slate-400 italic block">
+                                Sin comentarios.
+                              </span>
+                            ) : !isExpanded ? (
+                              <div>
+                                {latestComment?.date && (
+                                  <div className="flex items-center gap-1 text-[9.5px] font-semibold text-slate-500 mb-0.5">
+                                    <Calendar className="w-2.5 h-2.5 text-blue-600 shrink-0" />
+                                    <span>{formatDateSpanish(latestComment.date)}</span>
+                                    {latestComment.author && (
+                                      <span className="truncate max-w-[100px] text-slate-600 font-medium">
+                                        • {latestComment.author}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                <p 
+                                  className="text-[10.5px] text-slate-800 italic leading-snug line-clamp-2" 
+                                  title={latestComment ? `${formatDateSpanish(latestComment.date)} - ${latestComment.author}: ${latestComment.text}` : ''}
+                                >
+                                  "{latestComment?.text}"
+                                </p>
+                                {comments.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleCommentsExpanded(action.id)}
+                                    className="inline-flex items-center gap-1 text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer mt-0.5"
+                                    title="Ver todos los comentarios anteriores"
+                                  >
+                                    <History className="w-2.5 h-2.5" />
+                                    <span>Historial ({comments.length})</span>
+                                    <ChevronDown className="w-2.5 h-2.5" />
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <div>
+                                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 bg-slate-50/90 p-1.5 rounded-lg border border-slate-200">
+                                  {comments.map((com, cIdx) => (
+                                    <div 
+                                      key={com.id || cIdx} 
+                                      className={`text-[10px] pb-1.5 border-b border-slate-200/60 last:border-0 last:pb-0 ${
+                                        cIdx === comments.length - 1 ? 'font-medium' : ''
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between text-[9px] text-slate-500 font-semibold mb-0.5">
+                                        <span className="truncate max-w-[110px] text-slate-700">
+                                          {com.author || 'Usuario'}
+                                        </span>
+                                        <span className="font-mono text-slate-500 text-[8.5px]">
+                                          {formatDateSpanish(com.date)}
+                                        </span>
+                                      </div>
+                                      <p className="text-slate-800 italic leading-snug whitespace-pre-wrap">
+                                        "{com.text}"
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleCommentsExpanded(action.id)}
+                                  className="inline-flex items-center gap-1 text-[9.5px] font-bold text-slate-500 hover:text-slate-700 cursor-pointer mt-1"
+                                >
+                                  <ChevronUp className="w-2.5 h-2.5" />
+                                  <span>Ocultar historial</span>
+                                </button>
+                              </div>
+                            )}
 
-                            {action.attachments && action.attachments.length > 0 && (
+                            <div className="flex items-center gap-1.5 pt-0.5">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  if (onPreviewFile && action.attachments?.[0]) {
-                                    onPreviewFile(action.attachments[0], project.title);
-                                  }
-                                }}
-                                className="inline-flex items-center gap-0.5 text-[9px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-1 py-0.2 rounded cursor-pointer transition-colors"
-                                title={`${action.attachments.length} archivo(s) adjunto(s)`}
+                                onClick={() => onOpenEditAction(project, action)}
+                                className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
                               >
-                                <Paperclip className="w-2.5 h-2.5 text-blue-600" />
-                                <span>{action.attachments.length}</span>
+                                <MessageSquare className="w-2.5 h-2.5" />
+                                <span>{canEditAct ? 'Comentar' : 'Ver'}</span>
                               </button>
-                            )}
+
+                              {action.attachments && action.attachments.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (onPreviewFile && action.attachments?.[0]) {
+                                      onPreviewFile(action.attachments[0], project.title);
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-0.5 text-[9px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-1 py-0.2 rounded cursor-pointer transition-colors"
+                                  title={`${action.attachments.length} archivo(s) adjunto(s)`}
+                                >
+                                  <Paperclip className="w-2.5 h-2.5 text-blue-600" />
+                                  <span>{action.attachments.length}</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ) : (
+                        );
+                      })() : (
                         <span className="text-slate-300 text-center block">—</span>
                       )}
                     </td>

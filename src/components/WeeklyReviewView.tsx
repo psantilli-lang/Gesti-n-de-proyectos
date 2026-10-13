@@ -17,7 +17,8 @@ import {
   canUserAccessReportingAndPrioritization,
   isPMO,
   isActionOverdue, 
-  isActionDueSoon 
+  isActionDueSoon,
+  getActionCommentsHistory
 } from '../utils/helpers';
 import { 
   CalendarCheck, 
@@ -30,23 +31,26 @@ import {
   Filter, 
   Search, 
   ExternalLink, 
-  ArrowRight,
-  ShieldAlert,
-  ChevronDown,
-  Layers,
-  Sparkles,
-  RotateCcw,
-  Paperclip,
-  FileText,
-  Download,
-  Ban,
-  Trash2,
-  Eye,
-  Check,
-  X,
-  Edit3,
-  Table,
-  LayoutGrid,
+  ArrowRight, 
+  ShieldAlert, 
+  ChevronDown, 
+  ChevronUp, 
+  Layers, 
+  Sparkles, 
+  RotateCcw, 
+  Paperclip, 
+  FileText, 
+  Download, 
+  Ban, 
+  Trash2, 
+  Eye, 
+  Check, 
+  X, 
+  Edit3, 
+  Table, 
+  LayoutGrid, 
+  Calendar, 
+  History, 
 } from 'lucide-react';
 import { WeeklyReviewTable } from './WeeklyReviewTable';
 import { MultiSelectDropdown, MultiSelectOption } from './MultiSelectDropdown';
@@ -81,6 +85,19 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [editingTitleProjectId, setEditingTitleProjectId] = useState<string | null>(null);
   const [tempTitle, setTempTitle] = useState<string>('');
+  const [expandedCardCommentIds, setExpandedCardCommentIds] = useState<Set<string>>(new Set());
+
+  const toggleCardCommentExpanded = (actionId: string) => {
+    setExpandedCardCommentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(actionId)) {
+        next.delete(actionId);
+      } else {
+        next.add(actionId);
+      }
+      return next;
+    });
+  };
 
   const handleSaveTitle = (project: SAPProject) => {
     const trimmed = tempTitle.trim();
@@ -1030,21 +1047,94 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
 
                                       {/* Execution Comment */}
                                       <div className="mt-1.5 p-2 rounded-lg bg-slate-50 border border-slate-200/80 text-xs">
-                                        <div className="flex items-center gap-1.5 text-slate-500 font-medium mb-1">
-                                          <MessageSquare className="w-3 h-3 text-blue-600" />
-                                          <span className="text-[10px] uppercase font-bold text-slate-600">
-                                            Comentario de ejecución / Avance:
-                                          </span>
+                                        <div className="flex items-center justify-between gap-1 text-slate-500 font-medium mb-1">
+                                          <div className="flex items-center gap-1.5">
+                                            <MessageSquare className="w-3 h-3 text-blue-600" />
+                                            <span className="text-[10px] uppercase font-bold text-slate-600">
+                                              Comentario de avance:
+                                            </span>
+                                          </div>
+                                          {(() => {
+                                            const comments = getActionCommentsHistory(action);
+                                            const latest = comments.length > 0 ? comments[comments.length - 1] : null;
+                                            return latest?.date ? (
+                                              <div className="flex items-center gap-1 text-[10px] font-mono text-slate-500">
+                                                <Calendar className="w-2.5 h-2.5 text-slate-400" />
+                                                <span>{formatDateSpanish(latest.date)}</span>
+                                                {latest.author && (
+                                                  <span className="text-slate-600 font-sans font-medium">({latest.author})</span>
+                                                )}
+                                              </div>
+                                            ) : null;
+                                          })()}
                                         </div>
-                                        {action.executionComment ? (
-                                          <p className="text-slate-800 italic pl-1 leading-relaxed">
-                                            "{action.executionComment}"
-                                          </p>
-                                        ) : (
-                                          <p className="text-slate-400 italic pl-1">
-                                            Sin comentarios registrados aún por el responsable.
-                                          </p>
-                                        )}
+                                        {(() => {
+                                          const comments = getActionCommentsHistory(action);
+                                          const isExpanded = expandedCardCommentIds.has(action.id);
+                                          const latestComment = comments.length > 0 ? comments[comments.length - 1] : null;
+
+                                          if (comments.length === 0) {
+                                            return (
+                                              <p className="text-slate-400 italic pl-1">
+                                                Sin comentarios registrados aún por el responsable.
+                                              </p>
+                                            );
+                                          }
+
+                                          if (!isExpanded) {
+                                            return (
+                                              <div>
+                                                <p className="text-slate-800 italic pl-1 leading-relaxed">
+                                                  "{latestComment?.text}"
+                                                </p>
+                                                {comments.length > 1 && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => toggleCardCommentExpanded(action.id)}
+                                                    className="mt-1 inline-flex items-center gap-1 text-[10.5px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+                                                  >
+                                                    <History className="w-3 h-3" />
+                                                    <span>Ver historial completo ({comments.length} comentarios)</span>
+                                                    <ChevronDown className="w-3 h-3" />
+                                                  </button>
+                                                )}
+                                              </div>
+                                            );
+                                          }
+
+                                          return (
+                                            <div>
+                                              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 bg-white p-2 rounded-lg border border-slate-200/80 my-1">
+                                                {comments.map((com, cIdx) => (
+                                                  <div 
+                                                    key={com.id || cIdx} 
+                                                    className={`text-[11px] pb-1.5 border-b border-slate-100 last:border-0 last:pb-0 ${
+                                                      cIdx === comments.length - 1 ? 'font-medium' : ''
+                                                    }`}
+                                                  >
+                                                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold mb-0.5">
+                                                      <span className="text-slate-700 font-medium">{com.author || 'Usuario'}</span>
+                                                      <span className="font-mono text-slate-500 text-[9.5px]">
+                                                        {formatDateSpanish(com.date)}
+                                                      </span>
+                                                    </div>
+                                                    <p className="text-slate-800 italic leading-relaxed pl-1 whitespace-pre-wrap">
+                                                      "{com.text}"
+                                                    </p>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                              <button
+                                                type="button"
+                                                onClick={() => toggleCardCommentExpanded(action.id)}
+                                                className="inline-flex items-center gap-1 text-[10.5px] font-bold text-slate-500 hover:text-slate-700 cursor-pointer mt-0.5"
+                                              >
+                                                <ChevronUp className="w-3 h-3" />
+                                                <span>Ocultar historial</span>
+                                              </button>
+                                            </div>
+                                          );
+                                        })()}
 
                                         {/* Action Attachments */}
                                         {action.attachments && action.attachments.length > 0 && (

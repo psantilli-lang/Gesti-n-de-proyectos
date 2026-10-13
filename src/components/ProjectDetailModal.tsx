@@ -22,7 +22,8 @@ import {
   canUserAccessReportingAndPrioritization,
   isPMO,
   isActionOverdue, 
-  isActionDueSoon 
+  isActionDueSoon,
+  getActionCommentsHistory
 } from '../utils/helpers';
 import { 
   X, 
@@ -46,7 +47,10 @@ import {
   Check,
   Eye,
   Mail,
-  Send
+  Send,
+  History,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { emailNotificationService } from '../services/emailNotificationService';
 import { getAccessToken, getCurrentGoogleUser } from '../services/googleAuthService';
@@ -74,6 +78,19 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'diagnosis' | 'schedule' | 'actions'>('schedule');
   const [selectedStageFilter, setSelectedStageFilter] = useState<number | 'all'>('all');
+  const [expandedActionCommentIds, setExpandedActionCommentIds] = useState<Set<string>>(new Set());
+
+  const toggleActionCommentExpanded = (actionId: string) => {
+    setExpandedActionCommentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(actionId)) {
+        next.delete(actionId);
+      } else {
+        next.add(actionId);
+      }
+      return next;
+    });
+  };
 
   const health = storageService.getProjectHealth(project);
   const canEditMetadata = canUserEditProjectMetadata(currentUser, project);
@@ -800,20 +817,83 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                               {action.title}
                             </p>
 
-                            {/* Execution comment block */}
+                            {/* Execution comment and history block */}
                             <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80 text-xs">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                                Comentario de avance y acción tomada:
-                              </span>
-                              {action.executionComment ? (
-                                <p className="text-slate-800 italic leading-relaxed">
-                                  "{action.executionComment}"
-                                </p>
-                              ) : (
-                                <p className="text-slate-400 italic">
-                                  Sin comentarios registrados aún.
-                                </p>
-                              )}
+                              {(() => {
+                                const comments = getActionCommentsHistory(action);
+                                const isExpanded = expandedActionCommentIds.has(action.id);
+                                const latestComment = comments.length > 0 ? comments[comments.length - 1] : null;
+
+                                return (
+                                  <>
+                                    <div className="flex items-center justify-between gap-1 mb-1">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                        Comentario de avance:
+                                      </span>
+                                      {latestComment?.date && (
+                                        <span className="text-[10px] font-mono text-slate-500">
+                                          {formatDateSpanish(latestComment.date)}
+                                          {latestComment.author && ` • ${latestComment.author}`}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {comments.length === 0 ? (
+                                      <p className="text-slate-400 italic">
+                                        Sin comentarios registrados aún.
+                                      </p>
+                                    ) : !isExpanded ? (
+                                      <div>
+                                        <p className="text-slate-800 italic leading-relaxed">
+                                          "{latestComment?.text}"
+                                        </p>
+                                        {comments.length > 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleActionCommentExpanded(action.id)}
+                                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+                                          >
+                                            <History className="w-3 h-3" />
+                                            <span>Ver historial completo ({comments.length} comentarios)</span>
+                                            <ChevronDown className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div>
+                                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 bg-white p-2 rounded-lg border border-slate-200/80 my-1">
+                                          {comments.map((com, cIdx) => (
+                                            <div 
+                                              key={com.id || cIdx} 
+                                              className={`text-[11px] pb-1.5 border-b border-slate-100 last:border-0 last:pb-0 ${
+                                                cIdx === comments.length - 1 ? 'font-medium' : ''
+                                              }`}
+                                            >
+                                              <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold mb-0.5">
+                                                <span className="text-slate-700 font-medium">{com.author || 'Usuario'}</span>
+                                                <span className="font-mono text-slate-500 text-[9.5px]">
+                                                  {formatDateSpanish(com.date)}
+                                                </span>
+                                              </div>
+                                              <p className="text-slate-800 italic leading-relaxed pl-1 whitespace-pre-wrap">
+                                                "{com.text}"
+                                              </p>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleActionCommentExpanded(action.id)}
+                                          className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-slate-700 cursor-pointer mt-0.5"
+                                        >
+                                          <ChevronUp className="w-3 h-3" />
+                                          <span>Ocultar historial</span>
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
 
                               {/* Attached files on action */}
                               {action.attachments && action.attachments.length > 0 && (

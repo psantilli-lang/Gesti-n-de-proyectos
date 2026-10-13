@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   SAPProject, 
   StageAction, 
@@ -17,7 +17,8 @@ import {
   canUserEditActionDefinition,
   isPMO,
   formatDateSpanish, 
-  formatFileSize 
+  formatFileSize,
+  getActionCommentsHistory
 } from '../utils/helpers';
 import { 
   X, 
@@ -36,6 +37,7 @@ import {
   FileText,
   Eye,
   Edit3,
+  Calendar,
 } from 'lucide-react';
 
 // MODAL PARA AGREGAR NUEVA ACCIÓN
@@ -626,6 +628,8 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
   );
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
+  const existingComments = useMemo(() => getActionCommentsHistory(action), [action]);
+
   const handleFilesAdded = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     Array.from(files).forEach((file) => {
@@ -656,7 +660,8 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
       return;
     }
 
-    const updatedComments = [...(action.commentsHistory || [])];
+    const existingHistory = getActionCommentsHistory(action);
+    const updatedComments = [...existingHistory];
     if (newCommentNote.trim()) {
       updatedComments.push({
         id: `c-${Date.now()}`,
@@ -668,7 +673,7 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
 
     const finalComment = newCommentNote.trim()
       ? newCommentNote.trim()
-      : executionComment;
+      : (updatedComments.length > 0 ? updatedComments[updatedComments.length - 1].text : executionComment);
 
     const finalTitle = title.trim() || action.title;
     const finalResponsible = responsible.trim() || action.responsible;
@@ -907,35 +912,83 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
             />
           </div>
 
-          {/* Execution Comments Section */}
-          <div className="space-y-2">
-            <label className="block font-bold text-slate-700 flex items-center gap-1">
-              <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
-              Comentario respecto a la acción tomada (Actualización de avance):
-            </label>
-
-            {/* Existing latest comment */}
-            {action.executionComment && (
-              <div className="bg-slate-100 p-3 rounded-lg border border-slate-200 text-slate-800 italic">
-                <span className="text-[10px] font-bold text-slate-500 uppercase not-italic block mb-0.5">
-                  Comentario actual:
+          {/* Execution Comments & History Section */}
+          <div className="space-y-2.5 pt-1">
+            <div className="flex items-center justify-between">
+              <label className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                <span>Historial de Comentarios y Avances:</span>
+                <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                  {existingComments.length} {existingComments.length === 1 ? 'comentario' : 'comentarios'}
                 </span>
-                "{action.executionComment}"
+              </label>
+              {existingComments.length > 0 && (
+                <span className="text-[10px] text-slate-400 font-medium">Registro cronológico</span>
+              )}
+            </div>
+
+            {/* List of existing comments with date and author */}
+            {existingComments.length > 0 ? (
+              <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                {existingComments.map((com, idx) => {
+                  const isLatest = idx === existingComments.length - 1;
+                  return (
+                    <div
+                      key={com.id || idx}
+                      className={`p-2.5 rounded-lg border text-xs transition-colors ${
+                        isLatest
+                          ? 'bg-blue-50/70 border-blue-200 text-slate-900 shadow-2xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 text-[11px] mb-1">
+                        <div className="flex items-center gap-1.5 font-semibold text-slate-700">
+                          <User className="w-3 h-3 text-slate-400" />
+                          <span>{com.author || 'Usuario'}</span>
+                          {isLatest && (
+                            <span className="text-[9.5px] uppercase font-bold tracking-wide bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded">
+                              Último avance
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 text-slate-500 font-mono text-[10.5px]">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          <span>{formatDateSpanish(com.date)}</span>
+                        </div>
+                      </div>
+                      <p className="text-slate-800 italic leading-relaxed pl-1 whitespace-pre-wrap">
+                        "{com.text}"
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bg-slate-50 border border-dashed border-slate-200 rounded-lg p-3 text-center text-slate-400 text-xs italic">
+                Sin comentarios ni avances registrados aún por el responsable.
               </div>
             )}
 
             {/* Input for new comment */}
             {canEdit ? (
-              <textarea
-                rows={3}
-                placeholder="Escriba aquí el detalle de la acción tomada, resultados obtenidos, bloqueos o próximos pasos..."
-                value={newCommentNote}
-                onChange={(e) => setNewCommentNote(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg p-3 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
+              <div className="space-y-1 pt-1.5 border-t border-slate-100">
+                <label className="block text-[11px] font-bold text-slate-700 flex items-center justify-between">
+                  <span>Agregar nuevo avance / comentario:</span>
+                  <span className="text-[10px] font-normal text-slate-500">
+                    Quedará registrado con fecha {formatDateSpanish(new Date().toISOString().split('T')[0])} y tu usuario
+                  </span>
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Escriba aquí el detalle de la acción tomada, resultados obtenidos, bloqueos o próximos pasos..."
+                  value={newCommentNote}
+                  onChange={(e) => setNewCommentNote(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
             ) : (
               <p className="text-slate-400 italic text-xs">
-                No tiene permisos para agregar comentarios a esta acción.
+                No tiene permisos para agregar comentarios a esta acción (solo editable por el responsable asignado o Administrador).
               </p>
             )}
           </div>
@@ -1087,28 +1140,7 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
             )}
           </div>
 
-          {/* Comment History Log */}
-          {action.commentsHistory && action.commentsHistory.length > 0 && (
-            <div className="space-y-1.5 pt-2 border-t border-slate-100">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                Historial de Observaciones ({action.commentsHistory.length}):
-              </span>
-              <div className="space-y-1 max-h-28 overflow-y-auto">
-                {action.commentsHistory.map((com) => (
-                  <div
-                    key={com.id}
-                    className="p-2 rounded bg-slate-50 text-[11px] border border-slate-200"
-                  >
-                    <div className="flex items-center justify-between text-slate-500 font-semibold mb-0.5">
-                      <span>{com.author}</span>
-                      <span>{formatDateSpanish(com.date)}</span>
-                    </div>
-                    <p className="text-slate-800">{com.text}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+
 
           {/* Footer controls */}
           <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2">

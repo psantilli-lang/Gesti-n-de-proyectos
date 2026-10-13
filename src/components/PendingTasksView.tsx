@@ -38,6 +38,7 @@ import {
   isActionAssignedToUser,
   canUserEditAction,
   cleanPersonName,
+  getActionCommentsHistory,
 } from '../utils/helpers';
 
 interface PendingTasksViewProps {
@@ -666,15 +667,35 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
                         )}
 
                         {/* Last execution comment */}
-                        {action.executionComment && (
-                          <div className="mt-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-700 flex items-start gap-2">
-                            <MessageSquare className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
-                            <div>
-                              <span className="font-semibold text-slate-800">Último avance registrado: </span>
-                              <span>{action.executionComment}</span>
+                        {(() => {
+                          const comments = getActionCommentsHistory(action);
+                          const latest = comments.length > 0 ? comments[comments.length - 1] : null;
+                          if (!latest) return null;
+
+                          return (
+                            <div className="mt-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-700 flex items-start gap-2">
+                              <MessageSquare className="w-3.5 h-3.5 text-blue-600 mt-0.5 shrink-0" />
+                              <div className="w-full">
+                                <div className="flex items-center justify-between gap-1 text-[11px] mb-0.5">
+                                  <span className="font-semibold text-slate-800">
+                                    Último avance {latest.author ? `(${latest.author})` : ''}:
+                                  </span>
+                                  {latest.date && (
+                                    <span className="text-slate-500 font-mono text-[10px]">
+                                      {formatDateSpanish(latest.date)}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="italic text-slate-800 leading-relaxed">"{latest.text}"</span>
+                                {comments.length > 1 && (
+                                  <span className="block mt-1 text-[10.5px] text-indigo-600 font-medium">
+                                    • {comments.length} comentarios registrados en el historial
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>

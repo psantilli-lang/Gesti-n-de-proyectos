@@ -1,14 +1,40 @@
-import { UserSession, StageAction, SAPProject, ProjectState } from '../types/project';
+import { UserSession, StageAction, SAPProject, ProjectState, ActionComment } from '../types/project';
 
 export function formatDateSpanish(dateString?: string): string {
   if (!dateString) return 'Sin definir';
   try {
-    const [year, month, day] = dateString.split('-');
+    const cleanStr = dateString.includes('T') ? dateString.split('T')[0] : dateString;
+    const [year, month, day] = cleanStr.split('-');
     if (!year || !month || !day) return dateString;
     return `${day}/${month}/${year}`;
   } catch {
     return dateString;
   }
+}
+
+/**
+ * Safely returns all comments for a StageAction, preserving any legacy executionComment
+ * as the initial historical comment if commentsHistory was empty.
+ */
+export function getActionCommentsHistory(action?: StageAction | null): ActionComment[] {
+  if (!action) return [];
+  if (action.commentsHistory && action.commentsHistory.length > 0) {
+    return action.commentsHistory;
+  }
+  if (action.executionComment && action.executionComment.trim()) {
+    const fallbackDate = action.createdAt
+      ? action.createdAt.split('T')[0]
+      : (action.updatedAt ? action.updatedAt.split('T')[0] : '');
+    return [
+      {
+        id: `c-init-${action.id}`,
+        author: action.responsible && action.responsible !== 'Sin asignar' ? action.responsible : 'Registro inicial',
+        date: fallbackDate,
+        text: action.executionComment.trim(),
+      },
+    ];
+  }
+  return [];
 }
 
 export function formatFileSize(bytes: number): string {
