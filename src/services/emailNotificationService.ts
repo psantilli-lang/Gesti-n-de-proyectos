@@ -158,6 +158,12 @@ export const emailNotificationService = {
       await ensureFirebaseAuth();
       const logRef = doc(db, 'notificationLogs', log.id);
       await setDoc(logRef, log, { merge: true });
+
+      // If sent, also seal lock in sentReminders collection
+      if (log.status === 'sent') {
+        const lockRef = doc(db, 'sentReminders', log.id);
+        await setDoc(lockRef, { ...log, lockedAt: new Date().toISOString() }, { merge: true });
+      }
     } catch (e) {
       console.warn('Could not record notification log to cloud:', e);
     }
@@ -208,7 +214,7 @@ export const emailNotificationService = {
 
         // Condition A: Due Today (diffDays === 0)
         if (diffDays === 0) {
-          const reminderId = `due_today_${action.id}_${todayStr}`;
+          const reminderId = `due_today_${action.id}`;
           if (!this.wasReminderSent(reminderId)) {
             const subject = `⏰ [Recordatorio Hoy] Acción: ${action.title} (${project.code})`;
             const previewHtml = this.generateActionReminderEmailHtml({
@@ -231,10 +237,10 @@ export const emailNotificationService = {
             });
           }
         }
-        // Condition B: Overdue and multiple of 15 days (diffDays >= 15 && diffDays % 15 === 0)
-        else if (diffDays >= 15 && diffDays % 15 === 0) {
+        // Condition B: Overdue every 15 days (diffDays >= 15)
+        else if (diffDays >= 15) {
           const bracket = Math.floor(diffDays / 15) * 15;
-          const reminderId = `overdue_${bracket}d_${action.id}_${todayStr}`;
+          const reminderId = `overdue_${bracket}d_${action.id}`;
           if (!this.wasReminderSent(reminderId)) {
             const subject = `⚠️ [Aviso Vencimiento +${bracket} Días] Acción Pendiente: ${action.title} (${project.code})`;
             const previewHtml = this.generateActionReminderEmailHtml({

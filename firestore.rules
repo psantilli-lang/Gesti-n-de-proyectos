@@ -21,6 +21,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Sent reminders locks - allow read and write
+    match /sentReminders/{reminderId} {
+      allow read, write: if true;
+    }
+
     // System configuration (SMTP, central services) - allow read and write
     match /system_config/{configId} {
       allow read, write: if true;

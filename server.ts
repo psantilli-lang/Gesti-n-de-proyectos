@@ -9,6 +9,7 @@ import {
   resolveSmtpConfig, 
   maskEmail 
 } from './api/_mailer.js';
+import { processServerReminders } from './api/remindersCron.js';
 
 dotenv.config();
 
@@ -268,6 +269,23 @@ app.post('/api/mail/configure', async (req: Request, res: Response) => {
   }
 });
 
+// ================= SCHEDULED REMINDERS CRON ROUTE =================
+
+// Process action reminders with server-side and Firestore cloud locks
+app.all('/api/cron/reminders', async (req: Request, res: Response) => {
+  try {
+    const force = req.query.force === 'true' || req.body?.force === true;
+    const result = await processServerReminders(force);
+    return res.json(result);
+  } catch (error: any) {
+    console.error('Server reminders cron endpoint error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Error processing scheduled reminders.',
+    });
+  }
+});
+
 // ================= SERVER STARTUP & VITE INTEGRATION =================
 
 async function startServer() {
@@ -290,6 +308,20 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on http://0.0.0.0:${PORT} (mode: ${isProd ? 'production' : 'development'})`);
+
+    // Automatic server-side reminders check on server startup (delayed 8s)
+    setTimeout(() => {
+      processServerReminders(false).catch((err) =>
+        console.warn('[Server Startup] Reminders check warning:', err)
+      );
+    }, 8000);
+
+    // Hourly background interval to process reminders if not run yet today
+    setInterval(() => {
+      processServerReminders(false).catch((err) =>
+        console.warn('[Hourly Cron] Reminders check warning:', err)
+      );
+    }, 60 * 60 * 1000);
   });
 }
 

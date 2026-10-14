@@ -190,34 +190,19 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [projects]);
 
-  // Automatic background circuit for action reminders (Due today or Overdue every 15 days)
+  // Centralized background reminder trigger: delegating all reminder checks to the server with Firestore cloud locks
   useEffect(() => {
-    if (projects.length === 0) return;
-    const token = getAccessToken();
-    const sender = getCurrentGoogleUser()?.email || currentUser?.email || undefined;
-
-    const timer = setTimeout(async () => {
+    const triggerServerReminders = async () => {
       try {
-        const result = await emailNotificationService.processAutomaticReminders({
-          projects,
-          allUsers: usersList,
-          accessToken: token,
-          senderEmail: sender,
-        });
-
-        if (result.sentCount > 0) {
-          showToast(
-            `⏰ Recordatorio automático: se emitieron ${result.sentCount} notificación(es) por correo de acciones.`,
-            'info'
-          );
-        }
-      } catch (err) {
-        console.warn('Error en proceso de recordatorios automáticos:', err);
+        await fetch('/api/cron/reminders');
+      } catch (e) {
+        // Silent background fallback
       }
-    }, 2500);
+    };
 
+    const timer = setTimeout(triggerServerReminders, 3500);
     return () => clearTimeout(timer);
-  }, [projects, usersList, currentUser]);
+  }, []); // Run ONCE on initial app mount, never re-running on project updates
 
   // Guard: Prioritization and Reports are exclusive to PMO
   useEffect(() => {

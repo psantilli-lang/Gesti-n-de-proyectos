@@ -68,10 +68,18 @@ export async function ensureFirebaseAuth(): Promise<void> {
     try {
       await signInAnonymously(auth);
     } catch (err: any) {
-      // Ignorar auth/admin-restricted-operation si el proveedor anónimo está desactivado en la consola de Firebase
-      if (err?.code !== 'auth/admin-restricted-operation') {
-        console.warn('Anonymous sign-in for Firestore fallback:', err);
+      const code = err?.code || '';
+      const msg = err?.message || String(err || '');
+      // Suppress when anonymous sign-in is disabled or restricted in Firebase Console
+      if (
+        code === 'auth/admin-restricted-operation' ||
+        code === 'auth/operation-not-allowed' ||
+        msg.includes('admin-restricted-operation') ||
+        msg.includes('operation-not-allowed')
+      ) {
+        return;
       }
+      console.warn('Anonymous sign-in for Firestore fallback notice:', err);
     }
   }
 }
