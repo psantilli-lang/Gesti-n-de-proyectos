@@ -110,13 +110,13 @@ export function generateExecutiveReportPDF({
   doc.setTextColor(255, 255, 255);
   doc.text(`Emisión: ${currentDateStr}`, 283, 11, { align: 'right' });
 
-  const filterText = `Área: ${selectedArea === 'all' ? 'Todas' : selectedArea}   |   Rango: ${
+  const filterText = `Área: ${selectedArea === 'all' ? 'Todas' : selectedArea}   |   Foco: ${
     datePreset === 'all'
       ? 'Histórico Total'
       : datePreset === 'week'
-      ? 'Últimos 7 días'
+      ? 'Semanal (Esta semana + Vencidas)'
       : datePreset === 'month'
-      ? 'Últimos 30 días'
+      ? 'Mensual (Próximos 30 días + Vencidas)'
       : 'Personalizado'
   }`;
   doc.setTextColor(191, 219, 254);
@@ -133,8 +133,8 @@ export function generateExecutiveReportPDF({
     {
       title: 'PROYECTOS TOTALES',
       main: `${filteredProjects.length}`,
-      sub: `${filteredProjects.filter((p) => p.state !== '07- Entregado' && !p.state.includes('Cancelado')).length} activos • ${
-        filteredProjects.filter((p) => p.state === '07- Entregado').length
+      sub: `${filteredProjects.filter((p) => !p.state.includes('07- Entregado') && !p.state.includes('Entregado') && !p.state.includes('Cancelado')).length} en curso • ${
+        filteredProjects.filter((p) => p.state.includes('07- Entregado') || p.state.includes('Entregado')).length
       } finalizados${
         filteredProjects.filter((p) => p.state.includes('Cancelado')).length > 0
           ? ` • ${filteredProjects.filter((p) => p.state.includes('Cancelado')).length} cancelados`
@@ -323,7 +323,7 @@ export function generateExecutiveReportPDF({
   doc.setFontSize(9.5);
   doc.setTextColor(primaryNavy[0], primaryNavy[1], primaryNavy[2]);
   doc.text(
-    `LISTADO DE ACCIONES PENDIENTES POR PROYECTO (${pendingActionsList.length} ACCIONES)`,
+    `LISTADO DE ACCIONES REQUERIDAS POR PROYECTO (${pendingActionsList.length} ACCIONES EN FOCO)`,
     14,
     lastFinalY
   );

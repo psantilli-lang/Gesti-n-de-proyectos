@@ -53,6 +53,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ projects }) => {
   const [datePreset, setDatePreset] = useState<'all' | 'week' | 'month' | 'quarter' | 'custom'>('all');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [scheduleTableFilter, setScheduleTableFilter] = useState<'all' | 'active' | 'delayed'>('active');
   const [isGeneratingPDF, setIsGeneratingPDF] = useState<boolean>(false);
   const [pdfNotification, setPdfNotification] = useState<{
     type: 'success' | 'info' | 'error';
@@ -64,58 +65,74 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ projects }) => {
     return Array.from(new Set(projects.map((p) => p.area))).sort();
   }, [projects]);
 
-  // Compute date filter boundary
-  const { filterStart, filterEnd } = useMemo(() => {
-    const today = new Date();
-    let start: Date | null = null;
-    let end: Date | null = new Date();
-
-    if (datePreset === 'week') {
-      start = new Date();
-      start.setDate(today.getDate() - 7);
-    } else if (datePreset === 'month') {
-      start = new Date();
-      start.setDate(today.getDate() - 30);
-    } else if (datePreset === 'quarter') {
-      start = new Date();
-      start.setDate(today.getDate() - 90);
-    } else if (datePreset === 'custom') {
-      if (startDate) start = new Date(startDate);
-      if (endDate) end = new Date(endDate);
-    }
-
-    return {
-      filterStart: start ? start.toISOString().split('T')[0] : null,
-      filterEnd: end ? end.toISOString().split('T')[0] : null,
-    };
-  }, [datePreset, startDate, endDate]);
-
-  // Filter projects by Area and Date (based on createdAt or updatedAt)
+  // Proyectos base filtrados por Área: Representan la cartera real y completa evaluada
   const filteredProjects = useMemo(() => {
-    return projects.filter((p) => {
-      if (selectedArea !== 'all' && p.area !== selectedArea) return false;
+    if (selectedArea === 'all') return projects;
+    return projects.filter((p) => p.area === selectedArea);
+  }, [projects, selectedArea]);
 
-      if (filterStart) {
-        const prjDate = (p.createdAt || '').split('T')[0];
-        if (prjDate && prjDate < filterStart) return false;
-      }
-      if (filterEnd) {
-        const prjDate = (p.createdAt || '').split('T')[0];
-        if (prjDate && prjDate > filterEnd) return false;
-      }
-
-      return true;
-    });
-  }, [projects, selectedArea, filterStart, filterEnd]);
-
-  // 1. Proyectos Totales y Estado General
-  const totalProjects = filteredProjects.length;
+  // Helpers de estado
   const isProjectClosed = (p: SAPProject) => p.state.includes('07- Entregado') || p.state.includes('Entregado');
   const isProjectCancelled = (p: SAPProject) =>
     p.state.includes('Cancelado') || p.state.startsWith('8-') || p.state.startsWith('08-');
+
+  // 1. Proyectos Totales y Cartera Activa Real
+  const totalProjects = filteredProjects.length;
   const activeProjects = filteredProjects.filter((p) => !isProjectClosed(p) && !isProjectCancelled(p)).length;
   const closedProjects = filteredProjects.filter(isProjectClosed).length;
   const cancelledProjects = filteredProjects.filter(isProjectCancelled).length;
+
+  // Límite de fechas para el foco de vencimientos de acciones e hitos del período
+  const { actionFilterStart, actionFilterEnd, periodLabel } = useMemo(() => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    if (datePreset === 'all') {
+      return { actionFilterStart: null, actionFilterEnd: null, periodLabel: 'Histórico Total' };
+    }
+
+    if (datePreset === 'week') {
+      // Vencimientos de los próximos 7 días + semana actual
+      const end = new Date();
+      end.setDate(today.getDate() + 7);
+      return {
+        actionFilterStart: todayStr,
+        actionFilterEnd: end.toISOString().split('T')[0],
+        periodLabel: 'Próximos 7 días + Vencidas',
+      };
+    }
+
+    if (datePreset === 'month') {
+      // Vencimientos de los próximos 30 días
+      const end = new Date();
+      end.setDate(today.getDate() + 30);
+      return {
+        actionFilterStart: todayStr,
+        actionFilterEnd: end.toISOString().split('T')[0],
+        periodLabel: 'Próximos 30 días + Vencidas',
+      };
+    }
+
+    if (datePreset === 'quarter') {
+      const end = new Date();
+      end.setDate(today.getDate() + 90);
+      return {
+        actionFilterStart: todayStr,
+        actionFilterEnd: end.toISOString().split('T')[0],
+        periodLabel: 'Próximos 90 días + Vencidas',
+      };
+    }
+
+    if (datePreset === 'custom') {
+      return {
+        actionFilterStart: startDate || null,
+        actionFilterEnd: endDate || null,
+        periodLabel: startDate && endDate ? `${startDate} al ${endDate}` : 'Rango personalizado',
+      };
+    }
+
+    return { actionFilterStart: null, actionFilterEnd: null, periodLabel: 'Histórico Total' };
+  }, [datePreset, startDate, endDate]);
 
   // 2. Proyectos por Etapas (para gráfico de barras y tabla)
   const stageDistribution = useMemo(() => {
@@ -208,8 +225,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ projects }) => {
     };
   }, [filteredProjects]);
 
-  // 4. Listado de Acciones Pendientes por Proyecto
-  const pendingActionsList = useMemo(() => {
+  // 4. Todas las acciones pendientes en la cartera evaluada (sin proyectos cancelados)
+  const allPendingActions = useMemo(() => {
     const list: Array<{
       projectCode: string;
       projectTitle: string;
@@ -243,8 +260,52 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ projects }) => {
       });
     });
 
-    return list.sort((a, b) => a.requiredDate.localeCompare(b.requiredDate));
+    return list.sort((a, b) => {
+      // Priorizar acciones vencidas primero, luego por fecha requerida
+      if (a.isOverdue && !b.isOverdue) return -1;
+      if (!a.isOverdue && b.isOverdue) return 1;
+      return a.requiredDate.localeCompare(b.requiredDate);
+    });
   }, [filteredProjects]);
+
+  // Listado de Acciones filtradas según el foco del período seleccionado (Semanal / Mensual / Histórico / Custom)
+  const pendingActionsList = useMemo(() => {
+    if (datePreset === 'all') {
+      return allPendingActions;
+    }
+
+    return allPendingActions.filter((item) => {
+      // 1. Tareas vencidas: SIEMPRE se incluyen en la vista semanal/mensual para asegurar el seguimiento de demoras
+      if (item.isOverdue) return true;
+
+      // 2. Si no tiene fecha requerida, en vista histórica se ve; en períodos la mostramos si sigue pendiente
+      if (!item.requiredDate) return true;
+
+      // 3. Evaluar ventana de vencimiento según el preset seleccionado
+      if (actionFilterStart && item.requiredDate < actionFilterStart && !item.isOverdue) {
+        return false;
+      }
+      if (actionFilterEnd && item.requiredDate > actionFilterEnd) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [allPendingActions, datePreset, actionFilterStart, actionFilterEnd]);
+
+  // Proyectos para la tabla de cronograma según el subfiltro (Por defecto: Proyectos en curso)
+  const scheduleTableProjects = useMemo(() => {
+    if (scheduleTableFilter === 'active') {
+      return filteredProjects.filter((p) => !isProjectClosed(p) && !isProjectCancelled(p));
+    }
+    if (scheduleTableFilter === 'delayed') {
+      return filteredProjects.filter((p) => {
+        const health = storageService.getProjectHealth(p);
+        return health.overallStatus === 'Demorado' || health.delayedStagesCount > 0;
+      });
+    }
+    return filteredProjects;
+  }, [filteredProjects, scheduleTableFilter]);
 
   // Export to CSV
   const handleExportCSV = () => {
@@ -460,42 +521,56 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ projects }) => {
           {/* Date Range Preset Selector */}
           <div className="flex flex-wrap items-center gap-2">
             <Calendar className="w-4 h-4 text-slate-400" />
-            <span className="font-bold text-slate-700">Frecuencia / Fechas:</span>
+            <span className="font-bold text-slate-700">Frecuencia / Vencimientos:</span>
             <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5">
               <button
                 onClick={() => setDatePreset('all')}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  datePreset === 'all' ? 'bg-white text-blue-700 font-bold shadow-2xs' : 'text-slate-600'
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                  datePreset === 'all' ? 'bg-white text-blue-700 font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
+                title="Mostrar todas las acciones pendientes de la cartera"
               >
                 Histórico Total
               </button>
               <button
                 onClick={() => setDatePreset('week')}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  datePreset === 'week' ? 'bg-white text-blue-700 font-bold shadow-2xs' : 'text-slate-600'
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                  datePreset === 'week' ? 'bg-white text-blue-700 font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
+                title="Acciones con vencimiento en los próximos 7 días + tareas vencidas"
               >
-                Semanal (Últimos 7 días)
+                Semanal (Esta semana + vencidas)
               </button>
               <button
                 onClick={() => setDatePreset('month')}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  datePreset === 'month' ? 'bg-white text-blue-700 font-bold shadow-2xs' : 'text-slate-600'
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                  datePreset === 'month' ? 'bg-white text-blue-700 font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
+                title="Acciones con vencimiento en los próximos 30 días + tareas vencidas"
               >
-                Mensual (Últimos 30 días)
+                Mensual (Próximos 30 días + vencidas)
               </button>
               <button
                 onClick={() => setDatePreset('custom')}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  datePreset === 'custom' ? 'bg-white text-blue-700 font-bold shadow-2xs' : 'text-slate-600'
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                  datePreset === 'custom' ? 'bg-white text-blue-700 font-bold shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
+                title="Filtrar por rango de fechas personalizado"
               >
                 Personalizado
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Informative helper about the active portfolio vs period focus */}
+        <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
+          <span>
+            <strong className="text-slate-700">Cartera Evaluada:</strong> {activeProjects} proyectos en curso ({totalProjects} totales en {selectedArea === 'all' ? 'todas las áreas' : selectedArea}).
+          </span>
+          <span className="text-slate-600 font-medium">
+            Foco de acciones: <strong className="text-blue-700">{periodLabel}</strong> ({pendingActionsList.length} en foco / {allPendingActions.length} en cartera)
+          </span>
         </div>
 
         {/* Custom Date Inputs if custom is picked */}
@@ -555,8 +630,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ projects }) => {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-3xl font-black text-slate-900">{totalProjects}</span>
-            <span className="text-xs font-semibold text-slate-500">
-              ({activeProjects} en curso)
+            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+              {activeProjects} en curso
             </span>
           </div>
           <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
@@ -646,7 +721,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ projects }) => {
             </span>
           </div>
           <div className="mt-2 text-[11px] text-slate-500">
-            Asignadas a {new Set(pendingActionsList.map((a) => a.responsible)).size} responsables
+            {datePreset === 'all'
+              ? `Total histórico asignado a ${new Set(pendingActionsList.map((a) => a.responsible)).size} responsables`
+              : `Foco: ${periodLabel} • (${allPendingActions.length} en cartera)`}
           </div>
         </div>
       </div>
@@ -729,7 +806,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ projects }) => {
 
       {/* CUMPLIMIENTO DEL CRONOGRAMA: TABLA PLAN VS ACTUAL */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+        <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-bold text-slate-900">
               Cumplimiento del Cronograma (Plan vs. Actual) por Proyecto
@@ -738,9 +815,40 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ projects }) => {
               Desvíos de cronograma, fechas estimadas vs reales de hitos
             </p>
           </div>
-          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
-            {filteredProjects.length} proyectos evaluados
-          </span>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs">
+              <button
+                onClick={() => setScheduleTableFilter('active')}
+                className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer ${
+                  scheduleTableFilter === 'active'
+                    ? 'bg-white text-blue-700 font-bold shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                En curso ({activeProjects})
+              </button>
+              <button
+                onClick={() => setScheduleTableFilter('delayed')}
+                className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer ${
+                  scheduleTableFilter === 'delayed'
+                    ? 'bg-white text-rose-700 font-bold shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Con desvío ({scheduleCompliance.delayedProjects})
+              </button>
+              <button
+                onClick={() => setScheduleTableFilter('all')}
+                className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer ${
+                  scheduleTableFilter === 'all'
+                    ? 'bg-white text-slate-900 font-bold shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Todos ({filteredProjects.length})
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -757,7 +865,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ projects }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredProjects.map((p) => {
+              {scheduleTableProjects.map((p) => {
                 const health = storageService.getProjectHealth(p);
                 const completedStages = p.schedule.filter((s) => s.status === 'Completada').length;
 
@@ -830,17 +938,24 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ projects }) => {
           <div>
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Clock className="w-4 h-4 text-amber-600" />
-              Listado de Acciones Pendientes por Proyecto
+              Listado de Acciones Requeridas por Proyecto
             </h3>
             <p className="text-xs text-slate-500">
-              Tareas requeridas en curso o pendientes, responsables y fecha límite de entrega
+              {datePreset === 'all'
+                ? 'Todas las tareas pendientes en cartera con sus responsables y fechas límite'
+                : `Tareas con vencimiento en el período (${periodLabel}) y acciones vencidas prioritarias`}
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
-              {pendingActionsList.length} acciones pendientes
+              {pendingActionsList.length} acciones en foco
             </span>
+            {datePreset !== 'all' && (
+              <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                {allPendingActions.length} en cartera total
+              </span>
+            )}
           </div>
         </div>
 
