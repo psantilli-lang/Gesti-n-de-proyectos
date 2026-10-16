@@ -91,21 +91,21 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
               {/* 2. Prioridad */}
               <th className="py-2.5 px-1 text-center w-[38px] min-w-[36px] border-r border-slate-700">Prio.</th>
               {/* 3. Título del Proyecto */}
-              <th className="py-2.5 px-2 w-[14%] min-w-[110px] border-r border-slate-700">Título Proyecto</th>
+              <th className="py-2.5 px-2 w-[160px] max-w-[200px] min-w-[130px] border-r border-slate-700">Título Proyecto</th>
               {/* 4. Área */}
               <th className="py-2.5 px-1.5 text-center w-[76px] min-w-[72px] border-r border-slate-700">Área</th>
               {/* 5. Estado Proyecto */}
-              <th className="py-2.5 px-1.5 w-[118px] min-w-[115px] border-r border-slate-700">Estado Proy.</th>
+              <th className="py-2.5 px-1.5 w-[116px] min-w-[112px] border-r border-slate-700">Estado Proy.</th>
               {/* 6. Acción Pendiente */}
-              <th className="py-2.5 px-2 w-[11%] min-w-[85px] border-r border-slate-700">Acción Pendiente</th>
+              <th className="py-2.5 px-2.5 w-[220px] max-w-[250px] min-w-[170px] border-r border-slate-700">Acción Pendiente</th>
               {/* 7. Responsable */}
-              <th className="py-2.5 px-1.5 w-[92px] min-w-[88px] border-r border-slate-700">Responsable</th>
+              <th className="py-2.5 px-1.5 w-[90px] min-w-[86px] border-r border-slate-700">Responsable</th>
               {/* 8. Vencimiento */}
-              <th className="py-2.5 px-1 text-center w-[76px] min-w-[72px] border-r border-slate-700">Vencimiento</th>
+              <th className="py-2.5 px-1 text-center w-[78px] min-w-[74px] border-r border-slate-700">Vencimiento</th>
               {/* 9. Estado Acción */}
-              <th className="py-2.5 px-1.5 text-center w-[124px] min-w-[122px] border-r border-slate-700">Estado Acción</th>
+              <th className="py-2.5 px-1.5 text-center w-[112px] min-w-[108px] border-r border-slate-700">Estado Acción</th>
               {/* 10. Comentario / Avance */}
-              <th className="py-2.5 px-2.5 w-[22%] min-w-[170px] border-r border-slate-700">Comentario / Avance</th>
+              <th className="py-2.5 px-2.5 w-[280px] min-w-[240px] border-r border-slate-700">Comentario / Avance</th>
               {/* 11. Operaciones */}
               <th className="py-2.5 px-1 text-center w-[46px] min-w-[44px]">Acción</th>
             </tr>
@@ -193,7 +193,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     {isFirstRowOfProject && (
                       <td 
                         rowSpan={spanCount}
-                        className={`${projectBgClass} py-2 px-2.5 border-r border-slate-200 align-top`}
+                        className={`${projectBgClass} py-2 px-2.5 border-r border-slate-200 align-top w-[160px] max-w-[200px] min-w-[130px]`}
                       >
                         <div>
                           <button
@@ -224,7 +224,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     {isFirstRowOfProject && (
                       <td 
                         rowSpan={spanCount}
-                        className={`${projectBgClass} py-2 px-1.5 border-r border-slate-200 align-top`}
+                        className={`${projectBgClass} py-2 px-1.5 border-r border-slate-200 align-top w-[76px] min-w-[72px]`}
                       >
                         <span className="inline-block px-1.5 py-0.5 rounded text-[10.5px] font-semibold bg-white text-slate-800 border border-slate-200 whitespace-nowrap shadow-2xs">
                           {project.area}
@@ -236,7 +236,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     {isFirstRowOfProject && (
                       <td 
                         rowSpan={spanCount}
-                        className={`${projectBgClass} py-2 px-1.5 border-r border-slate-200 align-top`}
+                        className={`${projectBgClass} py-2 px-1.5 border-r border-slate-200 align-top w-[116px] min-w-[112px]`}
                       >
                         <select
                           value={project.state}
@@ -258,7 +258,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     )}
 
                     {/* 6. Acción Pendiente (o celda vacía para agregar) */}
-                    <td className="py-2 px-2 border-r border-slate-200 align-top">
+                    <td className="py-2 px-2.5 border-r border-slate-200 align-top w-[220px] max-w-[250px] min-w-[170px]">
                       {action ? (
                         <div className="space-y-1">
                           <div className="flex items-start justify-between gap-1 group">
@@ -305,7 +305,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     </td>
 
                     {/* 7. Responsable */}
-                    <td className="py-2 px-1.5 border-r border-slate-200 align-top">
+                    <td className="py-2 px-1.5 border-r border-slate-200 align-top w-[90px] min-w-[86px]">
                       {action ? (
                         <span className="inline-flex items-center gap-1 text-slate-700 font-semibold text-[10.5px]" title={action.responsible}>
                           <User className="w-3 h-3 text-slate-400 shrink-0" />
@@ -319,7 +319,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     </td>
 
                     {/* 8. Vencimiento */}
-                    <td className="py-2 px-1.5 text-center border-r border-slate-200 align-top">
+                    <td className="py-2 px-1 text-center border-r border-slate-200 align-top w-[78px] min-w-[74px]">
                       {action ? (
                         <div
                           className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium text-[10.5px] ${
@@ -341,7 +341,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     </td>
 
                     {/* 9. Estado Acción (Desplegable para evitar clics accidentales) */}
-                    <td className="py-2 px-1.5 text-center border-r border-slate-200 align-top">
+                    <td className="py-2 px-1.5 text-center border-r border-slate-200 align-top w-[112px] min-w-[108px]">
                       {action ? (
                         <select
                           value={action.status}
@@ -376,7 +376,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     </td>
 
                     {/* 10. Comentario / Avance */}
-                    <td className="py-2 px-2.5 border-r border-slate-200 align-top min-w-[170px]">
+                    <td className="py-2 px-2.5 border-r border-slate-200 align-top w-[280px] min-w-[240px]">
                       {action ? (() => {
                         const comments = getActionCommentsHistory(action);
                         const isExpanded = expandedCommentActionIds.has(action.id);
@@ -391,27 +391,31 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                             ) : !isExpanded ? (
                               <div>
                                 {latestComment?.date && (
-                                  <div className="flex items-center gap-1 text-[9.5px] font-semibold text-slate-500 mb-0.5">
-                                    <Calendar className="w-2.5 h-2.5 text-blue-600 shrink-0" />
-                                    <span>{formatDateSpanish(latestComment.date)}</span>
+                                  <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 mb-1 flex-wrap">
+                                    <div className="flex items-center gap-1 text-blue-600 shrink-0">
+                                      <Calendar className="w-2.5 h-2.5" />
+                                      <span className="font-mono">{formatDateSpanish(latestComment.date)}</span>
+                                    </div>
                                     {latestComment.author && (
-                                      <span className="truncate max-w-[100px] text-slate-600 font-medium">
+                                      <span className="text-slate-700 font-medium">
                                         • {latestComment.author}
                                       </span>
                                     )}
                                   </div>
                                 )}
-                                <p 
-                                  className="text-[10.5px] text-slate-800 italic leading-relaxed whitespace-pre-wrap break-words" 
-                                  title={latestComment ? `${formatDateSpanish(latestComment.date)} - ${latestComment.author}: ${latestComment.text}` : ''}
-                                >
-                                  "{latestComment?.text}"
-                                </p>
+                                <div className="bg-slate-50/90 rounded-lg p-2 border border-slate-200 shadow-2xs">
+                                  <p 
+                                    className="text-[11px] text-slate-800 italic leading-relaxed whitespace-pre-wrap break-words" 
+                                    title={latestComment ? `${formatDateSpanish(latestComment.date)} - ${latestComment.author}: ${latestComment.text}` : ''}
+                                  >
+                                    "{latestComment?.text}"
+                                  </p>
+                                </div>
                                 {comments.length > 1 && (
                                   <button
                                     type="button"
                                     onClick={() => toggleCommentsExpanded(action.id)}
-                                    className="inline-flex items-center gap-1 text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer mt-0.5"
+                                    className="inline-flex items-center gap-1 text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer mt-1"
                                     title="Ver todos los comentarios anteriores"
                                   >
                                     <History className="w-2.5 h-2.5" />
@@ -430,8 +434,8 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                                         cIdx === comments.length - 1 ? 'font-medium' : ''
                                       }`}
                                     >
-                                      <div className="flex items-center justify-between text-[9px] text-slate-500 font-semibold mb-0.5">
-                                        <span className="truncate max-w-[110px] text-slate-700">
+                                      <div className="flex items-center justify-between text-[9px] text-slate-500 font-semibold mb-0.5 flex-wrap gap-1">
+                                        <span className="text-slate-700">
                                           {com.author || 'Usuario'}
                                         </span>
                                         <span className="font-mono text-slate-500 text-[8.5px]">
@@ -502,7 +506,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     </td>
 
                     {/* 11. Operaciones */}
-                    <td className="py-2 px-1 text-center align-top">
+                    <td className="py-2 px-1 text-center align-top w-[46px] min-w-[44px]">
                       <div className="flex items-center justify-center">
                         <button
                           type="button"
