@@ -35,6 +35,7 @@ import {
 interface WeeklyReviewTableProps {
   projects: SAPProject[];
   currentUser: UserSession;
+  selectedResponsibles?: string[];
   onUpdateProject: (project: SAPProject) => void;
   onSelectProject: (project: SAPProject) => void;
   onOpenAddAction: (project: SAPProject) => void;
@@ -48,6 +49,7 @@ interface WeeklyReviewTableProps {
 export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
   projects,
   currentUser,
+  selectedResponsibles,
   onUpdateProject,
   onSelectProject,
   onOpenAddAction,
@@ -112,10 +114,20 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
           </thead>
           <tbody className="text-slate-700">
             {projects.map((project, pIndex) => {
-              // Get active (pending or in process) actions
-              const activeActions = project.actions.filter(
-                (a) => a.status === 'Pendiente' || a.status === 'En proceso'
-              );
+              // Get active (pending or in process) actions, optionally filtered by selectedResponsibles
+              const activeActions = project.actions.filter((a) => {
+                const isActive = a.status === 'Pendiente' || a.status === 'En proceso';
+                if (!isActive) return false;
+                if (selectedResponsibles && selectedResponsibles.length > 0) {
+                  const respClean = (a.responsible || '').trim();
+                  const isUnassigned = !respClean || respClean === 'Sin asignar';
+                  return selectedResponsibles.some((sel) => {
+                    if (sel === 'Sin asignar') return isUnassigned;
+                    return respClean.toLowerCase() === sel.toLowerCase();
+                  });
+                }
+                return true;
+              });
 
               // If project has no active actions, display 1 row with empty action columns
               const rowsToRender = activeActions.length > 0 ? activeActions : [null];

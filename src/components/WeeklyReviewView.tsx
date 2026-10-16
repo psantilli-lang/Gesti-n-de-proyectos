@@ -80,6 +80,7 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
   const [selectedProjectCodes, setSelectedProjectCodes] = useState<string[]>([]);
+  const [selectedResponsibles, setSelectedResponsibles] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending-actions' | 'delayed'>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -175,12 +176,46 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
     return opts.sort((a, b) => a.value.localeCompare(b.value, undefined, { numeric: true }));
   }, [projects]);
 
+  // Distinct responsibles dynamically extracted from active actions across projects
+  const responsibleOptions: MultiSelectOption[] = useMemo(() => {
+    const countsMap = new Map<string, number>();
+
+    projects.forEach((p) => {
+      (p.actions || []).forEach((a) => {
+        const isActive = a.status === 'Pendiente' || a.status === 'En proceso';
+        if (!isActive) return;
+        const resp = (a.responsible || '').trim();
+        const normResp = (!resp || resp === 'Sin asignar') ? 'Sin asignar' : resp;
+        countsMap.set(normResp, (countsMap.get(normResp) || 0) + 1);
+      });
+    });
+
+    const sortedKeys = Array.from(countsMap.keys()).sort((a, b) => {
+      if (a === 'Sin asignar') return 1;
+      if (b === 'Sin asignar') return -1;
+      return a.localeCompare(b);
+    });
+
+    return sortedKeys.map((key) => ({
+      value: key,
+      label: key,
+      count: countsMap.get(key) || 0,
+    }));
+  }, [projects]);
+
+  const totalActiveActionsCount = useMemo(() => {
+    return projects.reduce((acc, p) => {
+      return acc + (p.actions || []).filter((a) => a.status === 'Pendiente' || a.status === 'En proceso').length;
+    }, 0);
+  }, [projects]);
+
   // Check if any filter is actively restricting results
   const hasActiveFilters =
     selectedAreas.length > 0 ||
     selectedStates.length > 0 ||
     selectedPriorities.length > 0 ||
     selectedProjectCodes.length > 0 ||
+    selectedResponsibles.length > 0 ||
     statusFilter !== 'all' ||
     searchTerm.trim() !== '';
 
@@ -189,6 +224,7 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
     setSelectedStates([]);
     setSelectedPriorities([]);
     setSelectedProjectCodes([]);
+    setSelectedResponsibles([]);
     setStatusFilter('all');
     setSearchTerm('');
   };
@@ -226,12 +262,27 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
         if (!matchesCode) return false;
       }
 
-      // 4. Status/Condition filters (pending actions / delayed)
+      // 5. Responsable match (multi-select: matches projects that have matching active actions)
+      if (selectedResponsibles.length > 0) {
+        const hasMatchingActiveAction = p.actions.some((a) => {
+          const isActive = a.status === 'Pendiente' || a.status === 'En proceso';
+          if (!isActive) return false;
+          const respClean = (a.responsible || '').trim();
+          const isUnassigned = !respClean || respClean === 'Sin asignar';
+          return selectedResponsibles.some((sel) => {
+            if (sel === 'Sin asignar') return isUnassigned;
+            return respClean.toLowerCase() === sel.toLowerCase();
+          });
+        });
+        if (!hasMatchingActiveAction) return false;
+      }
+
+      // 6. Status/Condition filters (pending actions / delayed)
       const health = storageService.getProjectHealth(p);
       if (statusFilter === 'pending-actions' && health.pendingActionsCount === 0) return false;
       if (statusFilter === 'delayed' && health.delayedStagesCount === 0 && health.overdueActionsCount === 0) return false;
 
-      // 5. Search match (code, title, area, state, action title, responsible)
+      // 7. Search match (code, title, area, state, action title, responsible)
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
         const matchesCode = p.code.toLowerCase().includes(query);
@@ -250,7 +301,7 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
       if (a.area !== b.area) return a.area.localeCompare(b.area);
       return a.priority - b.priority;
     });
-  }, [projects, selectedAreas, selectedStates, selectedPriorities, selectedProjectCodes, statusFilter, searchTerm]);
+  }, [projects, selectedAreas, selectedStates, selectedPriorities, selectedProjectCodes, selectedResponsibles, statusFilter, searchTerm]);
 
   // Group filtered projects by area for structured sweeping
   const groupedByArea = useMemo<Record<string, SAPProject[]>>(() => {
@@ -435,6 +486,19 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
               />
             </div>
 
+            {/* Responsable multi-select filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-slate-600">Responsable:</span>
+              <MultiSelectDropdown
+                label="Filtrar por Responsable"
+                options={responsibleOptions}
+                selectedValues={selectedResponsibles}
+                onChange={setSelectedResponsibles}
+                allLabel="Todos los Responsables"
+                totalCount={totalActiveActionsCount}
+              />
+            </div>
+
             {/* Status / Condition Quick Buttons */}
             <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
               <button
@@ -582,6 +646,22 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
                   </button>
                 </span>
               ))}
+              {selectedResponsibles.map((resp) => (
+                <span
+                  key={resp}
+                  className="inline-flex items-center gap-1 bg-purple-50 border border-purple-200 text-purple-900 px-2 py-0.5 rounded-md font-medium text-[11px]"
+                >
+                  <User className="w-3 h-3 text-purple-600" />
+                  Responsable: {resp}
+                  <button
+                    onClick={() => setSelectedResponsibles(selectedResponsibles.filter((r) => r !== resp))}
+                    className="hover:text-purple-950 font-bold ml-0.5 text-xs cursor-pointer"
+                    title={`Quitar filtro responsable ${resp}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
               {statusFilter !== 'all' && (
                 <span className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-900 px-2 py-0.5 rounded-md font-medium text-[11px]">
                   Condición: {statusFilter === 'pending-actions' ? 'Con Acciones Pendientes' : 'Con Atraso'}
@@ -640,6 +720,7 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
         <WeeklyReviewTable
           projects={filteredProjects}
           currentUser={currentUser}
+          selectedResponsibles={selectedResponsibles}
           onUpdateProject={onUpdateProject}
           onSelectProject={onSelectProject}
           onOpenAddAction={onOpenAddAction}
@@ -671,9 +752,19 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
               <div className="space-y-4">
                 {areaProjects.map((project) => {
                   const health = storageService.getProjectHealth(project);
-                  const activeActions = project.actions.filter(
-                    (a) => a.status === 'Pendiente' || a.status === 'En proceso'
-                  );
+                  const activeActions = project.actions.filter((a) => {
+                    const isActive = a.status === 'Pendiente' || a.status === 'En proceso';
+                    if (!isActive) return false;
+                    if (selectedResponsibles.length > 0) {
+                      const respClean = (a.responsible || '').trim();
+                      const isUnassigned = !respClean || respClean === 'Sin asignar';
+                      return selectedResponsibles.some((sel) => {
+                        if (sel === 'Sin asignar') return isUnassigned;
+                        return respClean.toLowerCase() === sel.toLowerCase();
+                      });
+                    }
+                    return true;
+                  });
                   const completedActions = project.actions.filter((a) => a.status === 'Finalizada');
 
                   return (
