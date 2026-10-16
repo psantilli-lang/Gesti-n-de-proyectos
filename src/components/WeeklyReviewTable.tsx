@@ -16,7 +16,8 @@ import {
   canUserAccessReportingAndPrioritization,
   isActionOverdue,
   isActionDueSoon,
-  getActionCommentsHistory
+  getActionCommentsHistory,
+  parseActionTextWithLinks
 } from '../utils/helpers';
 import { 
   ExternalLink, 
@@ -270,32 +271,94 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     )}
 
                     {/* 6. Acción Pendiente (o celda vacía para agregar) */}
-                    <td className="py-2 px-2.5 border-r border-slate-200 align-top w-[220px] max-w-[250px] min-w-[170px]">
-                      {action ? (
-                        <div className="space-y-1">
-                          <div className="flex items-start justify-between gap-1 group">
-                            <span 
-                              onClick={() => canEditAct && onOpenEditAction(project, action)}
-                              className={`font-semibold text-slate-900 block text-[11px] leading-snug break-words whitespace-normal ${
-                                canEditAct ? 'hover:text-blue-700 cursor-pointer' : ''
-                              }`} 
-                              title={canEditAct ? 'Hacé clic para editar la acción o corregir faltas ortográficas' : action.title}
-                            >
-                              {action.title}
-                            </span>
-                            {canEditAct && (
-                              <button
-                                type="button"
-                                onClick={() => onOpenEditAction(project, action)}
-                                className="p-0.5 text-slate-400 hover:text-blue-600 rounded transition-colors shrink-0 opacity-60 hover:opacity-100 cursor-pointer"
-                                title="Editar texto de la acción / corregir ortografía"
-                              >
-                                <Edit3 className="w-3 h-3" />
-                              </button>
+                    <td className="py-2 px-2.5 border-r border-slate-200 align-top w-[220px] max-w-[250px] min-w-[170px] overflow-hidden">
+                      {action ? (() => {
+                        const { cleanText, urls, isPureLink } = parseActionTextWithLinks(action.title);
+
+                        return (
+                          <div className="space-y-1 w-full min-w-0 max-w-full overflow-hidden">
+                            {/* Caso 1: La acción es puramente un enlace / link */}
+                            {isPureLink && urls.length > 0 ? (
+                              <div className="flex items-center gap-1.5 w-full min-w-0">
+                                <a
+                                  href={urls[0].url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className={`flex-1 min-w-0 inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-md border transition-colors shadow-2xs group/link ${
+                                    urls[0].isSpreadsheet
+                                      ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                                      : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200'
+                                  }`}
+                                  title={`Abrir en pestaña nueva: ${urls[0].url}`}
+                                >
+                                  <ExternalLink className={`w-3 h-3 shrink-0 ${urls[0].isSpreadsheet ? 'text-emerald-600' : 'text-blue-600'}`} />
+                                  <span className="truncate flex-1 min-w-0">{urls[0].label}</span>
+                                </a>
+                                {canEditAct && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onOpenEditAction(project, action)}
+                                    className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors shrink-0 opacity-60 hover:opacity-100 cursor-pointer"
+                                    title="Editar enlace o texto de la acción"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              /* Caso 2: Título con texto o texto + enlace(s) */
+                              <>
+                                <div className="flex items-start justify-between gap-1 group w-full min-w-0">
+                                  <span 
+                                    onClick={() => canEditAct && onOpenEditAction(project, action)}
+                                    className={`font-semibold text-slate-900 block text-[11px] leading-snug break-words [overflow-wrap:anywhere] line-clamp-3 ${
+                                      canEditAct ? 'hover:text-blue-700 cursor-pointer' : ''
+                                    }`} 
+                                    title={canEditAct ? 'Hacé clic para editar la acción o corregir faltas ortográficas' : (cleanText || action.title)}
+                                  >
+                                    {cleanText || action.title}
+                                  </span>
+                                  {canEditAct && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onOpenEditAction(project, action)}
+                                      className="p-0.5 text-slate-400 hover:text-blue-600 rounded transition-colors shrink-0 opacity-60 hover:opacity-100 cursor-pointer"
+                                      title="Editar texto de la acción / corregir ortografía"
+                                    >
+                                      <Edit3 className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Clickable links pills if detected along with text */}
+                                {urls.length > 0 && (
+                                  <div className="flex flex-col gap-1 pt-0.5 w-full min-w-0">
+                                    {urls.map((linkItem, lIdx) => (
+                                      <a
+                                        key={lIdx}
+                                        href={linkItem.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className={`w-full max-w-full min-w-0 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border transition-colors shadow-2xs group/link ${
+                                          linkItem.isSpreadsheet
+                                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                                            : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200'
+                                        }`}
+                                        title={`Abrir en pestaña nueva: ${linkItem.url}`}
+                                      >
+                                        <ExternalLink className={`w-2.5 h-2.5 shrink-0 ${linkItem.isSpreadsheet ? 'text-emerald-600' : 'text-blue-600'}`} />
+                                        <span className="truncate flex-1 min-w-0">{linkItem.label}</span>
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
+                              </>
                             )}
                           </div>
-                        </div>
-                      ) : (
+                        );
+                      })() : (
                         <div className="flex items-center justify-between text-slate-400 italic text-[11px] py-0.5">
                           <span>— Sin pendientes —</span>
                           <button

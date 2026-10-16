@@ -18,7 +18,8 @@ import {
   isPMO,
   isActionOverdue, 
   isActionDueSoon,
-  getActionCommentsHistory
+  getActionCommentsHistory,
+  parseActionTextWithLinks
 } from '../utils/helpers';
 import { 
   CalendarCheck, 
@@ -1125,16 +1126,77 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
                                         </span>
                                       </div>
 
-                                      {/* Action Title */}
-                                      <p 
-                                        onClick={() => canEdit && onOpenEditAction(project, action)}
-                                        className={`text-sm font-semibold ${
-                                          action.status === 'Finalizada' ? 'line-through text-slate-400' : 'text-slate-900'
-                                        } ${canEdit ? 'cursor-pointer hover:text-blue-700' : ''}`}
-                                        title={canEdit ? 'Hacé clic para editar la acción o corregir faltas de ortografía' : action.title}
-                                      >
-                                        {action.title}
-                                      </p>
+                                      {/* Action Title / Link */}
+                                      {(() => {
+                                        const { cleanText, urls, isPureLink } = parseActionTextWithLinks(action.title);
+                                        return (
+                                          <div className="space-y-1.5 min-w-0">
+                                            {isPureLink && urls.length > 0 ? (
+                                              <div className="flex items-center gap-2">
+                                                <a
+                                                  href={urls[0].url}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                  className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md border transition-colors shadow-2xs group/link max-w-full ${
+                                                    urls[0].isSpreadsheet
+                                                      ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                                                      : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200'
+                                                  }`}
+                                                  title={`Abrir en pestaña nueva: ${urls[0].url}`}
+                                                >
+                                                  <ExternalLink className={`w-3.5 h-3.5 shrink-0 ${urls[0].isSpreadsheet ? 'text-emerald-600' : 'text-blue-600'}`} />
+                                                  <span className="truncate">{urls[0].label}</span>
+                                                </a>
+                                                {canEdit && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => onOpenEditAction(project, action)}
+                                                    className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors shrink-0 opacity-70 hover:opacity-100 cursor-pointer"
+                                                    title="Editar enlace de la acción"
+                                                  >
+                                                    <Edit3 className="w-3.5 h-3.5" />
+                                                  </button>
+                                                )}
+                                              </div>
+                                            ) : (
+                                              <>
+                                                <p 
+                                                  onClick={() => canEdit && onOpenEditAction(project, action)}
+                                                  className={`text-sm font-semibold break-words ${
+                                                    action.status === 'Finalizada' ? 'line-through text-slate-400' : 'text-slate-900'
+                                                  } ${canEdit ? 'cursor-pointer hover:text-blue-700' : ''}`}
+                                                  title={canEdit ? 'Hacé clic para editar la acción o corregir faltas de ortografía' : action.title}
+                                                >
+                                                  {cleanText || action.title}
+                                                </p>
+                                                {urls.length > 0 && (
+                                                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                                    {urls.map((linkItem, lIdx) => (
+                                                      <a
+                                                        key={lIdx}
+                                                        href={linkItem.url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded border transition-colors max-w-full shadow-2xs ${
+                                                          linkItem.isSpreadsheet
+                                                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                                                            : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200'
+                                                        }`}
+                                                        title={`Abrir en pestaña nueva: ${linkItem.url}`}
+                                                      >
+                                                        <ExternalLink className={`w-3 h-3 shrink-0 ${linkItem.isSpreadsheet ? 'text-emerald-600' : 'text-blue-600'}`} />
+                                                        <span className="truncate">{linkItem.label}</span>
+                                                      </a>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                              </>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
 
                                       {/* Execution Comment */}
                                       <div className="mt-1.5 p-2 rounded-lg bg-slate-50 border border-slate-200/80 text-xs">

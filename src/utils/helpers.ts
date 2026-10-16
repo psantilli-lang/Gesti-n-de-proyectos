@@ -37,6 +37,82 @@ export function getActionCommentsHistory(action?: StageAction | null): ActionCom
   return [];
 }
 
+/**
+ * Detects URLs inside action text or comments.
+ * Returns clean text and list of detected URLs with user-friendly labels.
+ */
+export interface ActionLinkItem {
+  url: string;
+  label: string;
+  isSpreadsheet: boolean;
+}
+
+export function parseActionTextWithLinks(rawText?: string | null): {
+  cleanText: string;
+  urls: ActionLinkItem[];
+  isPureLink: boolean;
+} {
+  if (!rawText) return { cleanText: '', urls: [], isPureLink: false };
+  const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|(?:docs|drive)\.google\.com\/[^\s]+|[a-zA-Z0-9-]+\.sharepoint\.com\/[^\s]+)/gi;
+  const matches = rawText.match(urlRegex);
+  if (!matches || matches.length === 0) {
+    return { cleanText: rawText, urls: [], isPureLink: false };
+  }
+
+  let cleanText = rawText;
+  matches.forEach((u) => {
+    cleanText = cleanText.replace(u, '');
+  });
+  // Clean up punctuation or spaces left over
+  cleanText = cleanText.replace(/\s{2,}/g, ' ').trim();
+  const isPureLink = cleanText.length === 0;
+
+  const urls: ActionLinkItem[] = matches.map((matchStr) => {
+    let fullUrl = matchStr.trim();
+    // remove trailing punctuation often caught by regex
+    fullUrl = fullUrl.replace(/[.,;:)]+$/, '');
+    if (!/^https?:\/\//i.test(fullUrl)) {
+      fullUrl = 'https://' + fullUrl;
+    }
+
+    let label = 'Abrir enlace';
+    let isSpreadsheet = false;
+    try {
+      const parsed = new URL(fullUrl);
+      const host = parsed.hostname.toLowerCase();
+      const path = parsed.pathname.toLowerCase();
+
+      if (host.includes('docs.google.com') && (path.includes('/spreadsheets/') || fullUrl.includes('spreadsheets'))) {
+        label = 'Planilla Google Sheets';
+        isSpreadsheet = true;
+      } else if (host.includes('docs.google.com') && (path.includes('/document/') || fullUrl.includes('document'))) {
+        label = 'Documento Google Docs';
+      } else if (host.includes('drive.google.com')) {
+        label = 'Carpeta Google Drive';
+      } else if (host.includes('sharepoint.com') || host.includes('onedrive.live.com') || host.includes('1drv.ms')) {
+        if (path.includes('.xlsx') || path.includes(':x:') || path.includes('excel') || fullUrl.includes('sheet')) {
+          label = 'Planilla Excel (SharePoint)';
+          isSpreadsheet = true;
+        } else {
+          label = 'Archivo SharePoint';
+        }
+      } else if (host.includes('jira') || path.includes('browse/')) {
+        label = 'Ticket JIRA';
+      } else if (host.includes('trello.com')) {
+        label = 'Tablero Trello';
+      } else {
+        const cleanHost = host.replace(/^www\./, '');
+        label = cleanHost.length > 24 ? cleanHost.slice(0, 22) + '...' : cleanHost;
+      }
+    } catch {
+      label = 'Abrir enlace';
+    }
+    return { url: fullUrl, label, isSpreadsheet };
+  });
+
+  return { cleanText, urls, isPureLink };
+}
+
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
