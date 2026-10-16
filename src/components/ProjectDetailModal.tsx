@@ -844,7 +844,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                                       </p>
                                     ) : !isExpanded ? (
                                       <div>
-                                        <p className="text-slate-800 italic leading-relaxed">
+                                        <p className="text-slate-800 italic leading-relaxed whitespace-pre-wrap break-words">
                                           "{latestComment?.text}"
                                         </p>
                                         {comments.length > 1 && (

@@ -97,7 +97,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
               {/* 5. Estado Proyecto */}
               <th className="py-2.5 px-1.5 w-[118px] min-w-[115px] border-r border-slate-700">Estado Proy.</th>
               {/* 6. Acción Pendiente */}
-              <th className="py-2.5 px-2 w-[13%] min-w-[95px] border-r border-slate-700">Acción Pendiente</th>
+              <th className="py-2.5 px-2 w-[11%] min-w-[85px] border-r border-slate-700">Acción Pendiente</th>
               {/* 7. Responsable */}
               <th className="py-2.5 px-1.5 w-[92px] min-w-[88px] border-r border-slate-700">Responsable</th>
               {/* 8. Vencimiento */}
@@ -105,7 +105,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
               {/* 9. Estado Acción */}
               <th className="py-2.5 px-1.5 text-center w-[124px] min-w-[122px] border-r border-slate-700">Estado Acción</th>
               {/* 10. Comentario / Avance */}
-              <th className="py-2.5 px-2 w-[14%] min-w-[105px] border-r border-slate-700">Comentario / Avance</th>
+              <th className="py-2.5 px-2.5 w-[22%] min-w-[170px] border-r border-slate-700">Comentario / Avance</th>
               {/* 11. Operaciones */}
               <th className="py-2.5 px-1 text-center w-[46px] min-w-[44px]">Acción</th>
             </tr>
@@ -376,7 +376,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                     </td>
 
                     {/* 10. Comentario / Avance */}
-                    <td className="py-2 px-2.5 border-r border-slate-200 align-top min-w-[200px] max-w-[280px]">
+                    <td className="py-2 px-2.5 border-r border-slate-200 align-top min-w-[170px]">
                       {action ? (() => {
                         const comments = getActionCommentsHistory(action);
                         const isExpanded = expandedCommentActionIds.has(action.id);
@@ -402,7 +402,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                                   </div>
                                 )}
                                 <p 
-                                  className="text-[10.5px] text-slate-800 italic leading-snug line-clamp-2" 
+                                  className="text-[10.5px] text-slate-800 italic leading-relaxed whitespace-pre-wrap break-words" 
                                   title={latestComment ? `${formatDateSpanish(latestComment.date)} - ${latestComment.author}: ${latestComment.text}` : ''}
                                 >
                                   "{latestComment?.text}"
@@ -422,7 +422,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                               </div>
                             ) : (
                               <div>
-                                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 bg-slate-50/90 p-1.5 rounded-lg border border-slate-200">
+                                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 bg-slate-50/90 p-1.5 rounded-lg border border-slate-200">
                                   {comments.map((com, cIdx) => (
                                     <div 
                                       key={com.id || cIdx} 
@@ -438,7 +438,7 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                                           {formatDateSpanish(com.date)}
                                         </span>
                                       </div>
-                                      <p className="text-slate-800 italic leading-snug whitespace-pre-wrap">
+                                      <p className="text-slate-800 italic leading-relaxed whitespace-pre-wrap break-words">
                                         "{com.text}"
                                       </p>
                                     </div>
@@ -455,15 +455,28 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                               </div>
                             )}
 
-                            <div className="flex items-center gap-1.5 pt-0.5">
+                            <div className="flex items-center gap-2 pt-0.5 flex-wrap">
                               <button
                                 type="button"
                                 onClick={() => onOpenEditAction(project, action)}
                                 className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                                title="Agregar o ver comentarios de esta acción"
                               >
                                 <MessageSquare className="w-2.5 h-2.5" />
                                 <span>{canEditAct ? 'Comentar' : 'Ver'}</span>
                               </button>
+
+                              {canEditAct && latestComment && (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenEditAction(project, action)}
+                                  className="inline-flex items-center gap-0.5 text-[9.5px] font-semibold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200 transition-colors cursor-pointer"
+                                  title="Editar comentario escrito / corregir ortografía"
+                                >
+                                  <Edit3 className="w-2.5 h-2.5" />
+                                  <span>Editar</span>
+                                </button>
+                              )}
 
                               {action.attachments && action.attachments.length > 0 && (
                                 <button

@@ -38,6 +38,7 @@ import {
   Eye,
   Edit3,
   Calendar,
+  Check,
 } from 'lucide-react';
 
 // MODAL PARA AGREGAR NUEVA ACCIÓN
@@ -628,7 +629,43 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
   );
   const [isDragging, setIsDragging] = useState<boolean>(false);
 
-  const existingComments = useMemo(() => getActionCommentsHistory(action), [action]);
+  const [commentsList, setCommentsList] = useState<ActionComment[]>(() =>
+    getActionCommentsHistory(action)
+  );
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState<string>('');
+
+  const canEditComment = (com: ActionComment) => {
+    if (isPmo) return true;
+    if (!currentUser?.name) return false;
+    const curName = (currentUser.name || '').trim().toLowerCase();
+    const authorName = (com.author || '').trim().toLowerCase();
+    const respName = (action.responsible || '').trim().toLowerCase();
+    return curName === authorName || curName === respName;
+  };
+
+  const handleStartEditComment = (com: ActionComment) => {
+    setEditingCommentId(com.id);
+    setEditingCommentText(com.text);
+  };
+
+  const handleCancelEditComment = () => {
+    setEditingCommentId(null);
+    setEditingCommentText('');
+  };
+
+  const handleSaveCommentEdit = (comId: string) => {
+    const trimmed = editingCommentText.trim();
+    if (!trimmed) {
+      alert('El texto del comentario no puede quedar vacío.');
+      return;
+    }
+    setCommentsList((prev) =>
+      prev.map((c) => (c.id === comId ? { ...c, text: trimmed } : c))
+    );
+    setEditingCommentId(null);
+    setEditingCommentText('');
+  };
 
   const handleFilesAdded = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -660,8 +697,7 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
       return;
     }
 
-    const existingHistory = getActionCommentsHistory(action);
-    const updatedComments = [...existingHistory];
+    const updatedComments = [...commentsList];
     if (newCommentNote.trim()) {
       updatedComments.push({
         id: `c-${Date.now()}`,
@@ -919,24 +955,28 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
                 <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
                 <span>Historial de Comentarios y Avances:</span>
                 <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                  {existingComments.length} {existingComments.length === 1 ? 'comentario' : 'comentarios'}
+                  {commentsList.length} {commentsList.length === 1 ? 'comentario' : 'comentarios'}
                 </span>
               </label>
-              {existingComments.length > 0 && (
+              {commentsList.length > 0 && (
                 <span className="text-[10px] text-slate-400 font-medium">Registro cronológico</span>
               )}
             </div>
 
             {/* List of existing comments with date and author */}
-            {existingComments.length > 0 ? (
-              <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                {existingComments.map((com, idx) => {
-                  const isLatest = idx === existingComments.length - 1;
+            {commentsList.length > 0 ? (
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {commentsList.map((com, idx) => {
+                  const isLatest = idx === commentsList.length - 1;
+                  const isBeingEdited = editingCommentId === com.id;
+
                   return (
                     <div
                       key={com.id || idx}
                       className={`p-2.5 rounded-lg border text-xs transition-colors ${
-                        isLatest
+                        isBeingEdited
+                          ? 'bg-blue-50/90 border-blue-400 shadow-xs'
+                          : isLatest
                           ? 'bg-blue-50/70 border-blue-200 text-slate-900 shadow-2xs'
                           : 'bg-slate-50 border-slate-200 text-slate-800'
                       }`}
@@ -951,14 +991,61 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1 text-slate-500 font-mono text-[10.5px]">
-                          <Calendar className="w-3 h-3 text-slate-400" />
-                          <span>{formatDateSpanish(com.date)}</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1 text-slate-500 font-mono text-[10.5px]">
+                            <Calendar className="w-3 h-3 text-slate-400" />
+                            <span>{formatDateSpanish(com.date)}</span>
+                          </div>
+                          {canEdit && canEditComment(com) && !isBeingEdited && (
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditComment(com)}
+                              className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-100/70 px-1.5 py-0.5 rounded transition-colors cursor-pointer"
+                              title="Editar el texto de este comentario"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>Editar</span>
+                            </button>
+                          )}
                         </div>
                       </div>
-                      <p className="text-slate-800 italic leading-relaxed pl-1 whitespace-pre-wrap">
-                        "{com.text}"
-                      </p>
+
+                      {isBeingEdited ? (
+                        <div className="mt-1.5 space-y-1.5 bg-white p-2.5 rounded-lg border border-blue-300 shadow-xs">
+                          <label className="text-[10.5px] font-bold text-blue-900 flex items-center gap-1">
+                            <Edit3 className="w-3 h-3 text-blue-600" />
+                            <span>Modificar texto del comentario:</span>
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={editingCommentText}
+                            onChange={(e) => setEditingCommentText(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-300 rounded-md p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 leading-relaxed"
+                            autoFocus
+                          />
+                          <div className="flex items-center justify-end gap-2 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={handleCancelEditComment}
+                              className="px-2.5 py-1 text-[11px] text-slate-600 hover:bg-slate-100 rounded font-semibold transition-colors cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveCommentEdit(com.id)}
+                              className="inline-flex items-center gap-1 px-3 py-1 text-[11px] bg-blue-600 hover:bg-blue-700 text-white rounded font-bold transition-colors shadow-2xs cursor-pointer"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Guardar cambio</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-slate-800 italic leading-relaxed pl-1 whitespace-pre-wrap break-words">
+                          "{com.text}"
+                        </p>
+                      )}
                     </div>
                   );
                 })}

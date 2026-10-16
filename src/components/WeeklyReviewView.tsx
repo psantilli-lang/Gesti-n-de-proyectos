@@ -1084,7 +1084,7 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
                                           if (!isExpanded) {
                                             return (
                                               <div>
-                                                <p className="text-slate-800 italic pl-1 leading-relaxed">
+                                                <p className="text-slate-800 italic pl-1 leading-relaxed whitespace-pre-wrap break-words">
                                                   "{latestComment?.text}"
                                                 </p>
                                                 {comments.length > 1 && (
