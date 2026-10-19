@@ -569,6 +569,8 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
   const isPmo = isPMO(currentUser) || pmoOverride;
   const canEdit = isPmo || canUserEditAction(currentUser, action);
   const canEditDefinition = isPmo || canUserEditActionDefinition(currentUser, action);
+  const canDelete = isPmo || canUserDeleteAction(currentUser, action, project);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState<boolean>(false);
   const userOptions = allUsers && allUsers.length > 0 ? allUsers : storageService.getUsers();
 
   const handleEnablePmo = () => {
@@ -1231,23 +1233,35 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
 
           {/* Footer controls */}
           <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-              <ShieldCheck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span>Acción permanente protegida (no eliminable)</span>
-            </div>
+            {canDelete && onDeleteAction ? (
+              <button
+                type="button"
+                onClick={() => setIsConfirmingDelete(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                title="Eliminar esta acción puntual del proyecto (habilitado solo para PMO)"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Eliminar acción</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                <ShieldCheck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span>Solo el PMO puede eliminar acciones</span>
+              </div>
+            )}
 
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-semibold transition-colors"
+                className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
               >
                 {canEdit ? 'Cancelar' : 'Cerrar'}
               </button>
               {canEdit && (
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs"
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
                 >
                   Guardar Actualización
                 </button>
@@ -1255,6 +1269,53 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
             </div>
           </div>
         </form>
+
+        {/* Diálogo de Confirmación para Borrar Acción (Exclusivo PMO) */}
+        {isConfirmingDelete && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl shadow-2xl border border-rose-100 max-w-md w-full p-5 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 rounded-full bg-rose-100 text-rose-600 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">
+                    ¿Eliminar esta acción puntual?
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                    Vas a eliminar la acción <span className="font-semibold text-slate-900">"{action.title}"</span> del proyecto <span className="font-semibold text-blue-600">{project.code}</span>.
+                  </p>
+                  <p className="text-[11px] text-rose-600 mt-2 font-medium bg-rose-50 border border-rose-100 rounded-md p-2">
+                    ⚠️ Esta operación no se puede deshacer. Se recomienda para remover acciones duplicadas o cargadas por error.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmingDelete(false)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsConfirmingDelete(false);
+                    if (onDeleteAction) {
+                      onDeleteAction(action.id);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Sí, eliminar acción</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

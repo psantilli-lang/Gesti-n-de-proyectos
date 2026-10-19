@@ -3,6 +3,7 @@ import {
   doc,
   setDoc,
   deleteDoc,
+  updateDoc,
   onSnapshot,
   getDocs,
   getDoc,
@@ -172,7 +173,7 @@ export const firestoreService = {
    * Guarantees that assigned actions, team members, and comments can NEVER be overwritten
    * or wiped out by a client with stale state or partial updates (e.g. changing status, priority or dates).
    */
-  async saveProject(project: SAPProject): Promise<void> {
+  async saveProject(project: SAPProject, options?: { allowActionRemoval?: boolean }): Promise<void> {
     try {
       await ensureFirebaseAuth();
       const docRef = doc(db, 'projects', project.id);
@@ -190,8 +191,10 @@ export const firestoreService = {
             remoteData.actions.forEach((remoteAct) => {
               const localAct = localActionMap.get(remoteAct.id);
               if (!localAct) {
-                // If remote action was added elsewhere, preserve it!
-                localActionMap.set(remoteAct.id, remoteAct);
+                // If remote action was added elsewhere, preserve it UNLESS allowActionRemoval was explicitly set!
+                if (!options?.allowActionRemoval) {
+                  localActionMap.set(remoteAct.id, remoteAct);
+                }
               } else {
                 // Merging existing action:
                 const mergedAct = { ...localAct };
@@ -292,6 +295,27 @@ export const firestoreService = {
       await deleteDoc(docRef);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `projects/${projectId}`);
+    }
+  },
+
+  /**
+   * Specifically removes an action from a project in Firestore
+   */
+  async deleteActionFromProject(projectId: string, actionId: string): Promise<void> {
+    try {
+      await ensureFirebaseAuth();
+      const docRef = doc(db, 'projects', projectId);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const remoteData = snap.data() as SAPProject;
+        const filteredActions = (remoteData.actions || []).filter((a) => a.id !== actionId);
+        await updateDoc(docRef, {
+          actions: JSON.parse(JSON.stringify(filteredActions)),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `projects/${projectId}`);
     }
   },
 

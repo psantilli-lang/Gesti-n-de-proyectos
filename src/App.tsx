@@ -620,8 +620,50 @@ export default function App() {
     }
   };
 
-  const handleDeleteAction = (_actionId: string) => {
-    alert('Operación no permitida: Por política de integridad y auditoría histórica, ningún usuario tiene permiso para borrar acciones del sistema.');
+  const handleDeleteAction = async (actionId: string) => {
+    if (!actionModalState.project) return;
+    if (!isPMO(currentUser)) {
+      showToast('Permiso denegado: Solo el rol PMO tiene autorización para eliminar acciones.', 'warn');
+      return;
+    }
+
+    const projectId = actionModalState.project.id;
+    const project = projects.find((p) => p.id === projectId) || actionModalState.project;
+    const actionToDelete = project.actions.find((a) => a.id === actionId);
+    const updatedActions = project.actions.filter((a) => a.id !== actionId);
+
+    const updatedProject: SAPProject = {
+      ...project,
+      actions: updatedActions,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // 1. Immediate local persistence
+    storageService.deleteAction(projectId, actionId);
+
+    // 2. Immediate state update for snappy UI
+    setProjects((prev) => {
+      const updatedList = prev.map((p) => (p.id === updatedProject.id ? updatedProject : p));
+      storageService.saveProjects(updatedList);
+      return updatedList;
+    });
+
+    if (selectedProjectForDetail && selectedProjectForDetail.id === updatedProject.id) {
+      setSelectedProjectForDetail(updatedProject);
+    }
+
+    // 3. Firestore cloud persistence
+    try {
+      await firestoreService.deleteActionFromProject(projectId, actionId);
+      await firestoreService.saveProject(updatedProject, { allowActionRemoval: true });
+    } catch (cloudErr) {
+      console.warn('Firestore action deletion note:', cloudErr);
+    }
+
+    const titleSnippet = actionToDelete?.title
+      ? (actionToDelete.title.length > 35 ? actionToDelete.title.slice(0, 32) + '...' : actionToDelete.title)
+      : 'Acción';
+    showToast(`Acción "${titleSnippet}" eliminada correctamente del proyecto ${project.code}.`, 'success');
     setActionModalState({ type: null, project: null });
   };
 

@@ -321,14 +321,14 @@ export function canUserAddAction(user?: UserSession | null, project?: SAPProject
 
 /**
  * Check if user can delete an action.
- * Rule: Ningún usuario puede borrar acciones (garantizado para integridad y trazabilidad de auditoría).
+ * Rule: Solo el rol PMO (o Administrador) tiene autorización para eliminar acciones puntuales (útil para duplicados o errores de carga).
  */
 export function canUserDeleteAction(
-  _user?: UserSession | null,
+  user?: UserSession | null,
   _action?: StageAction | null,
   _project?: SAPProject | null
 ): boolean {
-  return false;
+  return isPMO(user);
 }
 
 /**

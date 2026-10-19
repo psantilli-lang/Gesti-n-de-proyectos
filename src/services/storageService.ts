@@ -242,6 +242,25 @@ export const storageService = {
     }
   },
 
+  deleteAction(projectId: string, actionId: string): void {
+    try {
+      const current = this.getProjects();
+      const updated = current.map((p) => {
+        if (p.id === projectId) {
+          return {
+            ...p,
+            actions: (p.actions || []).filter((a) => a.id !== actionId),
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return p;
+      });
+      this.saveProjects(updated);
+    } catch (e) {
+      console.error('Error deleting action from localStorage', e);
+    }
+  },
+
   resetDefaultData(): SAPProject[] {
     this.saveProjects(INITIAL_PROJECTS);
     return INITIAL_PROJECTS;
