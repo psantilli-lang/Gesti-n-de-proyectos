@@ -11,26 +11,6 @@ export const INITIAL_APP_USERS: AppUser[] = [
     area: 'Administración',
     createdAt: '2026-01-01T08:00:00.000Z',
   },
-  {
-    id: 'usr-admin',
-    name: 'Administrador General (PMO SAP)',
-    username: 'admin',
-    email: 'admin.sap@empresa.com',
-    password: 'admin',
-    role: 'admin',
-    area: 'Administración',
-    createdAt: '2026-01-01T08:00:00.000Z',
-  },
-  {
-    id: 'usr-pmo',
-    name: 'Oficina de Proyectos (PMO SAP)',
-    username: 'pmo',
-    email: 'pmo.sap@empresa.com',
-    password: 'pmo',
-    role: 'pmo',
-    area: 'Administración',
-    createdAt: '2026-01-01T08:00:00.000Z',
-  },
 ];
 
 export const INITIAL_USERS: UserSession[] = INITIAL_APP_USERS.map((u) => ({

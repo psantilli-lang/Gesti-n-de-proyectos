@@ -62,7 +62,7 @@ function migrateProject(project: SAPProject): SAPProject {
       stageId: matched.id,
       stageName: matched.name,
       attachments: action.attachments || [],
-      createdBy: action.createdBy || action.responsible || 'Administrador General (PMO SAP)',
+      createdBy: action.createdBy || action.responsible || 'Paola Santilli (PMO SAP)',
     };
   });
 
@@ -113,7 +113,7 @@ function migrateProject(project: SAPProject): SAPProject {
     state: newState,
     schedule: newSchedule,
     actions: newActions,
-    createdBy: project.createdBy || (project.team?.[0]?.name ? project.team[0].name : 'Administrador General (PMO SAP)'),
+    createdBy: project.createdBy || (project.team?.[0]?.name ? project.team[0].name : 'Paola Santilli (PMO SAP)'),
   };
 }
 
@@ -507,57 +507,7 @@ export const storageService = {
     const cleanIdentifier = usernameOrEmail.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    // Direct check for admin master credentials
-    if (cleanIdentifier === 'admin' && (cleanPassword === 'admin' || cleanPassword === 'admin123')) {
-      const admin = users.find((u) => u.username.toLowerCase() === 'admin') || INITIAL_APP_USERS.find((u) => u.username === 'admin')!;
-      admin.lastLogin = new Date().toISOString();
-      const sess: UserSession = {
-        id: admin.id,
-        name: admin.name,
-        username: admin.username,
-        email: admin.email,
-        role: admin.role,
-        area: admin.area,
-      };
-      this.setCurrentUser(sess);
-      return { success: true, user: sess };
-    }
-
-    // Direct check for pmo master credentials
-    if (cleanIdentifier === 'pmo' && (cleanPassword === 'pmo' || cleanPassword === 'pmo123')) {
-      const pmo = users.find((u) => u.username.toLowerCase() === 'pmo') || INITIAL_APP_USERS.find((u) => u.username === 'pmo')!;
-      pmo.lastLogin = new Date().toISOString();
-      const sess: UserSession = {
-        id: pmo.id,
-        name: pmo.name,
-        username: pmo.username,
-        email: pmo.email,
-        role: pmo.role,
-        area: pmo.area,
-      };
-      this.setCurrentUser(sess);
-      return { success: true, user: sess };
-    }
-
-    // Direct check for psantilli (PMO Owner)
-    if (
-      (cleanIdentifier === 'psantilli' || cleanIdentifier === 'psantilli@crucianelli.com') &&
-      (cleanPassword === 'admin' || cleanPassword === 'admin123' || cleanPassword === 'pmo' || cleanPassword === '123' || cleanPassword === 'psantilli')
-    ) {
-      const paola = users.find((u) => u.username.toLowerCase() === 'psantilli') || INITIAL_APP_USERS.find((u) => u.username === 'psantilli')!;
-      paola.lastLogin = new Date().toISOString();
-      const sess: UserSession = {
-        id: paola.id,
-        name: paola.name,
-        username: paola.username,
-        email: paola.email,
-        role: paola.role,
-        area: paola.area,
-      };
-      this.setCurrentUser(sess);
-      return { success: true, user: sess };
-    }
-
+    // Strictly look up user in active registered users
     const matchedUser = users.find(
       (u) =>
         (u.username && u.username.trim().toLowerCase() === cleanIdentifier) ||
@@ -567,18 +517,18 @@ export const storageService = {
     if (!matchedUser) {
       return { 
         success: false, 
-        message: 'Usuario o correo no encontrado. Solicitá tu alta al PMO o ingresá con el usuario de administración (admin).' 
+        message: 'Usuario o correo no encontrado. Solicitá tu alta al equipo de PMO SAP en Gestión de Usuarios.' 
       };
     }
 
     const userPass = (matchedUser.password || '').trim();
-    const defaultPass = userPass || (matchedUser.username === 'admin' ? 'admin' : matchedUser.username === 'pmo' ? 'pmo' : '123');
+    const isPaola =
+      (matchedUser.username || '').toLowerCase() === 'psantilli' ||
+      (matchedUser.email || '').toLowerCase() === 'psantilli@crucianelli.com';
+
     const isPassValid =
       cleanPassword === userPass ||
-      cleanPassword === defaultPass ||
-      (matchedUser.username === 'admin' && (cleanPassword === 'admin' || cleanPassword === 'admin123')) ||
-      (matchedUser.username === 'pmo' && (cleanPassword === 'pmo' || cleanPassword === 'pmo123')) ||
-      (matchedUser.username === 'psantilli' && (cleanPassword === 'admin' || cleanPassword === 'psantilli'));
+      (isPaola && (cleanPassword === 'admin' || cleanPassword === 'psantilli' || cleanPassword === 'admin123'));
 
     if (!isPassValid) {
       return { success: false, message: 'Contraseña incorrecta. Verificá los caracteres ingresados.' };
@@ -608,6 +558,20 @@ export const storageService = {
         try {
           const parsed = JSON.parse(authData);
           if (parsed && typeof parsed === 'object' && parsed.name) {
+            // Verify that the user currently exists in active users directory
+            const users = this.getUsers();
+            const exists = users.find(
+              (u) =>
+                u.id === parsed.id ||
+                (u.username && u.username.toLowerCase() === (parsed.username || '').toLowerCase()) ||
+                (u.email && parsed.email && u.email.toLowerCase() === parsed.email.toLowerCase())
+            );
+            if (!exists) {
+              // User has been deleted from the system: clear session immediately
+              localStorage.removeItem(AUTH_SESSION_KEY);
+              localStorage.removeItem(USER_STORAGE_KEY);
+              return null;
+            }
             return parsed as UserSession;
           }
         } catch {
@@ -622,7 +586,7 @@ export const storageService = {
           if (parsed && typeof parsed === 'object' && parsed.name) {
             // Verify if user exists in current users
             const users = this.getUsers();
-            const found = users.find((u) => u.name === parsed.name);
+            const found = users.find((u) => u.name === parsed.name || (u.username && u.username === parsed.username));
             if (found) {
               const session: UserSession = {
                 id: found.id,
@@ -634,6 +598,8 @@ export const storageService = {
               };
               this.setCurrentUser(session);
               return session;
+            } else {
+              localStorage.removeItem(USER_STORAGE_KEY);
             }
           }
         } catch {
