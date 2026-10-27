@@ -10,8 +10,9 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db, auth, ensureFirebaseAuth } from './firebase';
-import { SAPProject, AppUser } from '../types/project';
+import { SAPProject, AppUser, AttachedFile } from '../types/project';
 import { storageService } from './storageService';
+import { attachmentService } from './attachmentService';
 import { INITIAL_PROJECTS, INITIAL_APP_USERS } from '../data/initialData';
 
 export enum OperationType {
@@ -98,9 +99,12 @@ export const firestoreService = {
           return a.code.localeCompare(b.code, undefined, { numeric: true });
         });
 
+        // Enrich with locally cached attachments for instant preview/download
+        const enrichedList = list.map((p) => attachmentService.enrichProjectWithCachedAttachments(p));
+
         // Save to local storage as local cache
-        storageService.saveProjects(list);
-        onData(list);
+        storageService.saveProjects(enrichedList);
+        onData(enrichedList);
       },
       (error) => {
         if ((error as any)?.code === 'unavailable') {
@@ -219,28 +223,35 @@ export const firestoreService = {
                   mergedAct.responsible = remoteAct.responsible;
                 }
 
-                // B. STATUS PROTECTION:
-                // If remote action was marked Finalizada or En proceso, don't revert to Pendiente
-                // unless local update has a newer updatedAt timestamp.
-                const localTimestamp = localAct.updatedAt || localAct.createdAt || '';
-                const remoteTimestamp = remoteAct.updatedAt || remoteAct.createdAt || '';
-                if (localTimestamp && remoteTimestamp && localTimestamp < remoteTimestamp) {
-                  // Remote is newer, prefer remote status and responsible
-                  mergedAct.status = remoteAct.status;
-                  mergedAct.responsible = remoteAct.responsible;
-                  mergedAct.completedAt = remoteAct.completedAt || mergedAct.completedAt;
-                } else if (remoteAct.status === 'Finalizada' && localAct.status !== 'Finalizada' && !localAct.updatedAt) {
-                  mergedAct.status = remoteAct.status;
-                  mergedAct.completedAt = remoteAct.completedAt || mergedAct.completedAt;
+                // B. STATUS & COMPLETION PROTECTION:
+                // If local user marked the action as 'Finalizada' or updated status, NEVER overwrite with remote Pendiente!
+                if (localAct.status === 'Finalizada') {
+                  mergedAct.status = 'Finalizada';
+                  mergedAct.completedAt = localAct.completedAt || remoteAct.completedAt || new Date().toISOString();
+                } else if (remoteAct.status === 'Finalizada') {
+                  const localTimestamp = localAct.updatedAt || localAct.createdAt || '';
+                  const remoteTimestamp = remoteAct.updatedAt || remoteAct.createdAt || '';
+                  if (localTimestamp && remoteTimestamp && localTimestamp < remoteTimestamp) {
+                    mergedAct.status = remoteAct.status;
+                    mergedAct.completedAt = remoteAct.completedAt || mergedAct.completedAt;
+                  } else {
+                    mergedAct.status = localAct.status;
+                  }
+                } else {
+                  mergedAct.status = localAct.status;
                 }
 
                 // C. COMMENTS & ATTACHMENTS PROTECTION:
                 if ((remoteAct.commentsHistory?.length || 0) > (localAct.commentsHistory?.length || 0)) {
                   mergedAct.commentsHistory = remoteAct.commentsHistory;
                 }
-                if ((remoteAct.attachments?.length || 0) > (localAct.attachments?.length || 0)) {
-                  mergedAct.attachments = remoteAct.attachments;
-                }
+                
+                // Combine attachments by ID so neither remote nor new local attachments are lost
+                const combinedAttMap = new Map();
+                (remoteAct.attachments || []).forEach((att) => combinedAttMap.set(att.id, att));
+                (localAct.attachments || []).forEach((att) => combinedAttMap.set(att.id, att));
+                mergedAct.attachments = Array.from(combinedAttMap.values());
+
                 if (remoteAct.executionComment && !localAct.executionComment) {
                   mergedAct.executionComment = remoteAct.executionComment;
                 }
@@ -261,7 +272,10 @@ export const firestoreService = {
         console.warn('Action merge safety note:', checkErr);
       }
 
-      const cleanProject = JSON.parse(JSON.stringify(projectToSave));
+      // Automatically extract large attachments into the dedicated 'attachments' collection
+      // ensuring this project document remains ultra-light (< 20 KB) and never exceeds Firestore's 1MB limit.
+      const sanitizedProject = await attachmentService.sanitizeProjectForFirestore(projectToSave);
+      const cleanProject = JSON.parse(JSON.stringify(sanitizedProject));
       await setDoc(docRef, cleanProject, { merge: true });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `projects/${project.id}`);
@@ -496,5 +510,19 @@ export const firestoreService = {
     } catch (error) {
       console.warn('Firestore bulk delete users warning:', error);
     }
+  },
+
+  /**
+   * Loads full attachment dataUrl (supporting chunked storage)
+   */
+  async getAttachmentDataUrl(attachmentId: string): Promise<string | null> {
+    return attachmentService.getAttachmentDataUrl(attachmentId);
+  },
+
+  /**
+   * Saves an attachment in Firestore attachments collection
+   */
+  async saveAttachment(file: AttachedFile): Promise<void> {
+    return attachmentService.saveAttachment(file);
   },
 };

@@ -11,6 +11,14 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Attachments collection (dedicated storage to keep project documents ultra-light and avoid the 1MB Firestore doc limit)
+    match /attachments/{attachmentId} {
+      allow read, write: if true;
+      match /chunks/{chunkId} {
+        allow read, write: if true;
+      }
+    }
+
     // App Users directory - allow read and write
     match /users/{userId} {
       allow read, write: if true;

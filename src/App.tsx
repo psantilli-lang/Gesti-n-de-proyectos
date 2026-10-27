@@ -235,21 +235,27 @@ export default function App() {
   };
 
   // Keep state in sync with localStorage and Firestore
-  const handleUpdateProject = (updated: SAPProject) => {
+  const handleUpdateProject = async (updated: SAPProject) => {
     setProjects((prev) => {
       const updatedList = prev.map((p) => (p.id === updated.id ? updated : p));
       storageService.saveProjects(updatedList);
       return updatedList;
     });
-    firestoreService.saveProject(updated).catch((e) => console.warn('Firestore saveProject error:', e));
 
     // Keep active detail modal in sync
     if (selectedProjectForDetail && selectedProjectForDetail.id === updated.id) {
       setSelectedProjectForDetail(updated);
     }
+
+    try {
+      await firestoreService.saveProject(updated);
+    } catch (e: any) {
+      console.warn('Firestore saveProject error:', e);
+      showToast(`⚠️ Error al sincronizar con la nube: ${e?.message || 'Error de conexión'}`, 'warn');
+    }
   };
 
-  const handleSaveProject = (
+  const handleSaveProject = async (
     savedProject: SAPProject,
     options?: { openAddAction?: boolean }
   ) => {
@@ -264,13 +270,20 @@ export default function App() {
       storageService.saveProjects(updatedList);
       return updatedList;
     });
-    firestoreService.saveProject(savedProject).catch((e) => console.warn('Firestore saveProject error:', e));
+
     setIsProjectFormOpen(false);
     setProjectToEdit(null);
 
     // If it was being viewed in detail, update it
     if (selectedProjectForDetail && selectedProjectForDetail.id === savedProject.id) {
       setSelectedProjectForDetail(savedProject);
+    }
+
+    try {
+      await firestoreService.saveProject(savedProject);
+    } catch (e: any) {
+      console.warn('Firestore saveProject error:', e);
+      showToast(`⚠️ Error al sincronizar con la nube: ${e?.message || 'Error de conexión'}`, 'warn');
     }
 
     // Open add action modal if requested

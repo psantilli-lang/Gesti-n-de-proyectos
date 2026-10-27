@@ -7,6 +7,7 @@ import {
   ActionStatus,
   AttachedFile,
 } from '../types/project';
+import { attachmentService } from '../services/attachmentService';
 import {
   CheckCircle2,
   Clock,
@@ -226,7 +227,8 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
         return {
           ...act,
           status: newStatus,
-          completedAt: newStatus === 'Finalizada' ? new Date().toISOString() : act.completedAt,
+          completedAt: newStatus === 'Finalizada' ? (act.completedAt || new Date().toISOString()) : act.completedAt,
+          updatedAt: new Date().toISOString(),
         };
       }
       return act;
@@ -241,6 +243,37 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
     if (newStatus === 'Finalizada') {
       setCompletedNotice(`¡Tarea completada con éxito!`);
       setTimeout(() => setCompletedNotice(null), 3500);
+    }
+  };
+
+  const handlePreviewAttachment = async (att: AttachedFile, projectTitle?: string) => {
+    let fileToPreview = att;
+    if (!fileToPreview.dataUrl) {
+      const url = await attachmentService.getAttachmentDataUrl(att.id);
+      if (url) {
+        fileToPreview = { ...att, dataUrl: url };
+      }
+    }
+    if (onPreviewFile) {
+      onPreviewFile(fileToPreview, projectTitle);
+    }
+  };
+
+  const handleDownloadAttachment = async (e: React.MouseEvent, att: AttachedFile) => {
+    e.stopPropagation();
+    let url = att.dataUrl;
+    if (!url) {
+      url = await attachmentService.getAttachmentDataUrl(att.id);
+    }
+    if (url) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = att.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      alert(`No se pudo descargar el archivo ${att.name}.`);
     }
   };
 
@@ -678,11 +711,9 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (onPreviewFile) {
-                                      onPreviewFile(att, project.title);
-                                    }
+                                    handlePreviewAttachment(att, project.title);
                                   }}
-                                  className="hover:underline hover:text-blue-700 truncate max-w-[130px] text-left"
+                                  className="hover:underline hover:text-blue-700 truncate max-w-[130px] text-left cursor-pointer"
                                   title={`Ver vista previa de ${att.name}`}
                                 >
                                   {att.name}
@@ -692,23 +723,22 @@ export const PendingTasksView: React.FC<PendingTasksViewProps> = ({
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      onPreviewFile(att, project.title);
+                                      handlePreviewAttachment(att, project.title);
                                     }}
-                                    className="p-0.5 text-slate-400 hover:text-blue-600 rounded transition-colors"
+                                    className="p-0.5 text-slate-400 hover:text-blue-600 rounded transition-colors cursor-pointer"
                                     title="Previsualizar archivo"
                                   >
                                     <Eye className="w-3 h-3" />
                                   </button>
                                 )}
-                                <a
-                                  href={att.dataUrl}
-                                  download={att.name}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="p-0.5 text-slate-400 hover:text-blue-600 rounded transition-colors"
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDownloadAttachment(e, att)}
+                                  className="p-0.5 text-slate-400 hover:text-blue-600 rounded transition-colors cursor-pointer"
                                   title={`Descargar ${att.name}`}
                                 >
                                   <Download className="w-3 h-3" />
-                                </a>
+                                </button>
                               </div>
                             ))}
                           </div>

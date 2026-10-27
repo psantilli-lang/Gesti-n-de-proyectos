@@ -10,6 +10,7 @@ import {
   PROJECT_STAGES
 } from '../types/project';
 import { storageService } from '../services/storageService';
+import { attachmentService } from '../services/attachmentService';
 import { 
   canUserEditAction, 
   canUserAddAction,
@@ -173,14 +174,16 @@ export const AddActionModal: React.FC<AddActionModalProps> = ({
     Array.from(files).forEach((file) => {
       const reader = new FileReader();
       reader.onload = () => {
+        const dUrl = reader.result as string;
         const newFile: AttachedFile = {
           id: `att-act-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           name: file.name,
           size: file.size,
           type: file.type || 'application/octet-stream',
           uploadedAt: new Date().toISOString().split('T')[0],
-          dataUrl: reader.result as string,
+          dataUrl: dUrl,
         };
+        attachmentService.cacheLocally(newFile.id, dUrl);
         setAttachments((prev) => [...prev, newFile]);
       };
       reader.readAsDataURL(file);
@@ -674,18 +677,51 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
     Array.from(files).forEach((file) => {
       const reader = new FileReader();
       reader.onload = () => {
+        const dUrl = reader.result as string;
         const newFile: AttachedFile = {
           id: `att-act-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           name: file.name,
           size: file.size,
           type: file.type || 'application/octet-stream',
           uploadedAt: new Date().toISOString().split('T')[0],
-          dataUrl: reader.result as string,
+          dataUrl: dUrl,
         };
+        attachmentService.cacheLocally(newFile.id, dUrl);
         setAttachments((prev) => [...prev, newFile]);
       };
       reader.readAsDataURL(file);
     });
+  };
+
+  const handlePreviewAttachment = async (fileItem: AttachedFile) => {
+    let fileToPreview = fileItem;
+    if (!fileToPreview.dataUrl) {
+      const url = await attachmentService.getAttachmentDataUrl(fileItem.id);
+      if (url) {
+        fileToPreview = { ...fileItem, dataUrl: url };
+      }
+    }
+    if (onPreviewFile) {
+      onPreviewFile(fileToPreview, project.title);
+    }
+  };
+
+  const handleDownloadAttachment = async (e: React.MouseEvent, fileItem: AttachedFile) => {
+    e.stopPropagation();
+    let url = fileItem.dataUrl;
+    if (!url) {
+      url = await attachmentService.getAttachmentDataUrl(fileItem.id);
+    }
+    if (url) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileItem.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      alert(`No se pudo descargar el archivo ${fileItem.name}.`);
+    }
   };
 
   const handleRemoveAttachment = (fileId: string) => {
@@ -1184,28 +1220,24 @@ export const EditActionModal: React.FC<EditActionModalProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0 ml-2">
-                      {file.dataUrl && (
-                        <>
-                          {onPreviewFile && (
-                            <button
-                              type="button"
-                              onClick={() => onPreviewFile(file, project.title)}
-                              className="p-1 text-slate-500 hover:text-blue-600 hover:bg-white rounded transition-colors"
-                              title="Previsualizar archivo"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          <a
-                            href={file.dataUrl}
-                            download={file.name}
-                            className="p-1 text-slate-500 hover:text-blue-600 hover:bg-white rounded transition-colors"
-                            title="Descargar archivo"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </a>
-                        </>
+                      {onPreviewFile && (
+                        <button
+                          type="button"
+                          onClick={() => handlePreviewAttachment(file)}
+                          className="p-1 text-slate-500 hover:text-blue-600 hover:bg-white rounded transition-colors cursor-pointer"
+                          title="Previsualizar archivo"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={(e) => handleDownloadAttachment(e, file)}
+                        className="p-1 text-slate-500 hover:text-blue-600 hover:bg-white rounded transition-colors cursor-pointer"
+                        title="Descargar archivo"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
                       {canEdit && (
                         <button
                           type="button"

@@ -13,9 +13,11 @@ import {
   AlertCircle,
   Maximize2,
   Minimize2,
+  Loader2,
 } from 'lucide-react';
 import { AttachedFile } from '../types/project';
 import { formatFileSize, formatDateSpanish } from '../utils/helpers';
+import { attachmentService } from '../services/attachmentService';
 
 interface FilePreviewModalProps {
   file: AttachedFile | null;
@@ -46,52 +48,96 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  // Reset zoom & rotation when file changes
+  const [resolvedDataUrl, setResolvedDataUrl] = useState<string | null>(file?.dataUrl || null);
+  const [isLoadingFile, setIsLoadingFile] = useState<boolean>(false);
+
+  // Process text decoding when dataUrl is available
+  const processTextContent = (dataUrl: string) => {
+    setIsLoadingText(true);
+    try {
+      if (dataUrl.startsWith('data:')) {
+        const parts = dataUrl.split(',');
+        if (parts.length > 1) {
+          const mimeInfo = parts[0];
+          const raw = parts[1];
+          if (mimeInfo.includes(';base64')) {
+            try {
+              const decoded = atob(raw);
+              setTextContent(decoded);
+            } catch (err) {
+              const binary = atob(raw);
+              const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+              const decoded = new TextDecoder('utf-8').decode(bytes);
+              setTextContent(decoded);
+            }
+          } else {
+            setTextContent(decodeURIComponent(raw));
+          }
+        }
+      } else {
+        fetch(dataUrl)
+          .then((res) => res.text())
+          .then((text) => setTextContent(text))
+          .catch(() => setLoadError('No se pudo cargar el contenido de texto.'));
+      }
+    } catch (e) {
+      setLoadError('Error al decodificar archivo de texto');
+    } finally {
+      setIsLoadingText(false);
+    }
+  };
+
+  // Reset zoom & rotation and resolve file dataUrl when file changes
   useEffect(() => {
+    let isCancelled = false;
     setZoom(100);
     setRotation(0);
     setTextContent(null);
     setLoadError(null);
 
-    if (!file || !file.dataUrl) return;
-
-    const fileType = getFileType(file.name, file.type);
-    if (fileType === 'text') {
-      setIsLoadingText(true);
-      try {
-        if (file.dataUrl.startsWith('data:')) {
-          const parts = file.dataUrl.split(',');
-          if (parts.length > 1) {
-            const mimeInfo = parts[0];
-            const raw = parts[1];
-            if (mimeInfo.includes(';base64')) {
-              try {
-                const decoded = atob(raw);
-                setTextContent(decoded);
-              } catch (err) {
-                // UTF-8 decode fallback
-                const binary = atob(raw);
-                const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-                const decoded = new TextDecoder('utf-8').decode(bytes);
-                setTextContent(decoded);
-              }
-            } else {
-              setTextContent(decodeURIComponent(raw));
-            }
-          }
-        } else {
-          // If direct URL or path, fetch as text
-          fetch(file.dataUrl)
-            .then((res) => res.text())
-            .then((text) => setTextContent(text))
-            .catch((err) => setLoadError('No se pudo cargar el contenido de texto.'));
-        }
-      } catch (e) {
-        setLoadError('Error al decodificar archivo de texto');
-      } finally {
-        setIsLoadingText(false);
-      }
+    if (!file) {
+      setResolvedDataUrl(null);
+      return;
     }
+
+    if (file.dataUrl) {
+      setResolvedDataUrl(file.dataUrl);
+      const fileType = getFileType(file.name, file.type);
+      if (fileType === 'text') {
+        processTextContent(file.dataUrl);
+      }
+      return;
+    }
+
+    // Lazy load dataUrl from dedicated attachment store
+    setIsLoadingFile(true);
+    attachmentService
+      .getAttachmentDataUrl(file.id)
+      .then((url) => {
+        if (!isCancelled) {
+          if (url) {
+            setResolvedDataUrl(url);
+            const fileType = getFileType(file.name, file.type);
+            if (fileType === 'text') {
+              processTextContent(url);
+            }
+          } else {
+            setLoadError('El archivo no tiene contenido disponible para previsualización.');
+          }
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setLoadError('Error al descargar el archivo adjunto desde la nube.');
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) setIsLoadingFile(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [file]);
 
   if (!file) return null;
@@ -131,9 +177,13 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
   // Safe download trigger
   const handleDownload = () => {
-    if (!file.dataUrl) return;
+    const url = resolvedDataUrl || file.dataUrl;
+    if (!url) {
+      alert('El archivo se está cargando. Por favor intentá nuevamente en un instante.');
+      return;
+    }
     const link = document.createElement('a');
-    link.href = file.dataUrl;
+    link.href = url;
     link.download = file.name;
     document.body.appendChild(link);
     link.click();
@@ -142,7 +192,8 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
   // Open in new window safely
   const handleOpenNewWindow = () => {
-    if (!file.dataUrl) return;
+    const url = resolvedDataUrl || file.dataUrl;
+    if (!url) return;
     const newWindow = window.open();
     if (newWindow) {
       if (fileCategory === 'image') {
@@ -150,12 +201,12 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
           <html>
             <head><title>${file.name}</title></head>
             <body style="margin:0;background:#0f172a;display:flex;align-items:center;justify-content:center;height:100vh;">
-              <img src="${file.dataUrl}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${file.name}" />
+              <img src="${url}" style="max-width:100%;max-height:100%;object-fit:contain;" alt="${file.name}" />
             </body>
           </html>
         `);
       } else {
-        newWindow.location.href = file.dataUrl;
+        newWindow.location.href = url;
       }
     }
   };
@@ -250,10 +301,10 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             )}
 
             {/* Open in new tab/window */}
-            {file.dataUrl && (
+            {(resolvedDataUrl || file.dataUrl) && (
               <button
                 onClick={handleOpenNewWindow}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                 title="Abrir en pestaña nueva"
               >
                 <ExternalLink className="w-4 h-4" />
@@ -263,7 +314,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             {/* Toggle Fullscreen */}
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors hidden sm:inline-flex"
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors hidden sm:inline-flex cursor-pointer"
               title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -272,7 +323,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             {/* Download Button */}
             <button
               onClick={handleDownload}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-colors shadow-sm cursor-pointer"
               title="Descargar archivo original"
             >
               <Download className="w-4 h-4" />
@@ -282,7 +333,7 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors ml-1"
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors ml-1 cursor-pointer"
               title="Cerrar vista previa (Esc)"
             >
               <X className="w-5 h-5" />
@@ -292,11 +343,18 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
         {/* Content Viewer Area */}
         <div className="flex-1 bg-slate-950 relative overflow-auto flex items-center justify-center p-4">
+          {isLoadingFile && (
+            <div className="flex flex-col items-center justify-center gap-3 text-slate-400 p-8">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+              <p className="text-sm font-medium">Cargando archivo adjunto desde la nube...</p>
+            </div>
+          )}
+
           {/* IMAGE VIEWER */}
-          {fileCategory === 'image' && file.dataUrl && (
+          {!isLoadingFile && fileCategory === 'image' && (resolvedDataUrl || file.dataUrl) && (
             <div className="w-full h-full flex items-center justify-center overflow-auto select-none">
               <img
-                src={file.dataUrl}
+                src={resolvedDataUrl || file.dataUrl || ''}
                 alt={file.name}
                 style={{
                   transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
@@ -310,10 +368,10 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
           )}
 
           {/* PDF VIEWER */}
-          {fileCategory === 'pdf' && file.dataUrl && (
+          {!isLoadingFile && fileCategory === 'pdf' && (resolvedDataUrl || file.dataUrl) && (
             <div className="w-full h-full flex flex-col rounded-lg overflow-hidden border border-slate-800 bg-white shadow-xl">
               <iframe
-                src={file.dataUrl}
+                src={resolvedDataUrl || file.dataUrl || ''}
                 title={file.name}
                 className="w-full h-full border-none"
               />
