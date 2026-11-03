@@ -15,6 +15,7 @@ import {
   canUserAddAction,
   canUserCancelProject,
   canUserAccessReportingAndPrioritization,
+  canUserEditProjectMetadata,
   isPMO,
   isActionOverdue, 
   isActionDueSoon,
@@ -949,11 +950,23 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
 
                             <button
                               onClick={() => onSelectProject(project)}
-                              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
+                              className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors cursor-pointer"
                             >
                               <span>Ficha y Cronograma</span>
                               <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
                             </button>
+
+                            {onEditProject && (isPMO(currentUser) || canUserEditProjectMetadata(currentUser, project)) && (
+                              <button
+                                type="button"
+                                onClick={() => onEditProject(project)}
+                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors cursor-pointer"
+                                title="Editar datos del proyecto, miembros o diagnóstico (PMO)"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                                <span>Editar</span>
+                              </button>
+                            )}
                           </div>
                         </div>
 

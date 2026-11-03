@@ -64,6 +64,7 @@ interface ProjectDetailModalProps {
   onOpenEditAction: (project: SAPProject, action: StageAction) => void;
   onPreviewFile?: (file: AttachedFile, projectTitle?: string) => void;
   onDeleteProject?: (projectId: string) => void;
+  onEditProject?: (project: SAPProject) => void;
 }
 
 export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
@@ -75,6 +76,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
   onOpenEditAction,
   onPreviewFile,
   onDeleteProject,
+  onEditProject,
 }) => {
   const [activeTab, setActiveTab] = useState<'diagnosis' | 'schedule' | 'actions'>('schedule');
   const [selectedStageFilter, setSelectedStageFilter] = useState<number | 'all'>('all');
@@ -402,6 +404,18 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                   })}
                 </select>
               </div>
+
+              {onEditProject && (canEditMetadata || isPMO(currentUser)) && (
+                <button
+                  type="button"
+                  onClick={() => onEditProject(project)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold transition-all shadow-xs cursor-pointer text-xs"
+                  title="Editar información general, integrantes del equipo, diagnóstico o necesidad de mejora (PMO)"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                  <span>Editar Proyecto</span>
+                </button>
+              )}
 
               {isPMO(currentUser) && (
                 <button
@@ -1000,9 +1014,22 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                       <FileText className="w-4 h-4 text-blue-600" />
                       Situación Actual (Diagnóstico)
                     </h4>
-                    <span className="text-[11px] text-slate-500 font-medium">
-                      {(project.currentSituationFiles || []).length} archivos
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        {(project.currentSituationFiles || []).length} archivos
+                      </span>
+                      {onEditProject && (canEditMetadata || isPMO(currentUser)) && (
+                        <button
+                          type="button"
+                          onClick={() => onEditProject(project)}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                          title="Modificar o ampliar la situación actual del proyecto"
+                        >
+                          <Edit className="w-3 h-3" />
+                          <span>Editar</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line bg-white p-3.5 rounded-lg border border-slate-200">
@@ -1094,9 +1121,22 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                       <Tag className="w-4 h-4 text-emerald-600" />
                       Necesidad de Mejora (Objetivo)
                     </h4>
-                    <span className="text-[11px] text-slate-500 font-medium">
-                      {(project.improvementNeedFiles || []).length} archivos
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        {(project.improvementNeedFiles || []).length} archivos
+                      </span>
+                      {onEditProject && (canEditMetadata || isPMO(currentUser)) && (
+                        <button
+                          type="button"
+                          onClick={() => onEditProject(project)}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                          title="Modificar o ampliar la necesidad de mejora del proyecto"
+                        >
+                          <Edit className="w-3 h-3" />
+                          <span>Editar</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line bg-white p-3.5 rounded-lg border border-slate-200">
@@ -1184,10 +1224,23 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
 
               {/* Equipo del Proyecto */}
               <div className="bg-white p-5 rounded-xl border border-slate-200 space-y-3">
-                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Users className="w-4 h-4 text-blue-600" />
-                  Equipo de Proyecto
-                </h4>
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                  <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Users className="w-4 h-4 text-blue-600" />
+                    Equipo de Proyecto
+                  </h4>
+                  {onEditProject && (canEditMetadata || isPMO(currentUser)) && (
+                    <button
+                      type="button"
+                      onClick={() => onEditProject(project)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer"
+                      title="Agregar nuevos miembros al equipo o modificar roles"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Agregar / Modificar Miembros</span>
+                    </button>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   {project.team.map((member) => (

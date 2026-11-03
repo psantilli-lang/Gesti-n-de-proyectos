@@ -275,7 +275,7 @@ export default function App() {
     setProjectToEdit(null);
 
     // If it was being viewed in detail, update it
-    if (selectedProjectForDetail && selectedProjectForDetail.id === savedProject.id) {
+    if (selectedProjectForDetail && (selectedProjectForDetail.id === savedProject.id || selectedProjectForDetail.code === savedProject.code)) {
       setSelectedProjectForDetail(savedProject);
     }
 
@@ -810,6 +810,10 @@ export default function App() {
           onOpenEditAction={(p, a) => handleOpenEditAction(p, a)}
           onPreviewFile={handlePreviewFile}
           onDeleteProject={handleDeleteProject}
+          onEditProject={(p) => {
+            setProjectToEdit(p);
+            setIsProjectFormOpen(true);
+          }}
         />
       )}
 
