@@ -20,7 +20,8 @@ import {
   isActionOverdue, 
   isActionDueSoon,
   getActionCommentsHistory,
-  parseActionTextWithLinks
+  parseActionTextWithLinks,
+  getProjectConsultants
 } from '../utils/helpers';
 import { 
   CalendarCheck, 
@@ -30,6 +31,7 @@ import {
   Plus, 
   MessageSquare, 
   User, 
+  UserCheck,
   Filter, 
   Search, 
   ExternalLink, 
@@ -83,6 +85,7 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
   const [selectedProjectCodes, setSelectedProjectCodes] = useState<string[]>([]);
   const [selectedResponsibles, setSelectedResponsibles] = useState<string[]>([]);
+  const [selectedConsultants, setSelectedConsultants] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending-actions' | 'delayed'>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -205,6 +208,43 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
     }));
   }, [projects]);
 
+  // Distinct SAP consultants dynamically extracted across projects
+  const consultantOptions: MultiSelectOption[] = useMemo(() => {
+    const countsMap = new Map<string, number>();
+    let unassignedCount = 0;
+
+    projects.forEach((p) => {
+      const consultants = getProjectConsultants(p);
+      if (consultants.length === 0) {
+        unassignedCount++;
+      } else {
+        consultants.forEach((c) => {
+          const name = (c.name || '').trim();
+          if (name) {
+            countsMap.set(name, (countsMap.get(name) || 0) + 1);
+          }
+        });
+      }
+    });
+
+    const sortedKeys = Array.from(countsMap.keys()).sort((a, b) => a.localeCompare(b));
+    const opts: MultiSelectOption[] = sortedKeys.map((name) => ({
+      value: name,
+      label: name,
+      count: countsMap.get(name) || 0,
+    }));
+
+    if (unassignedCount > 0) {
+      opts.push({
+        value: 'Sin consultor asignado',
+        label: 'Sin consultor asignado',
+        count: unassignedCount,
+      });
+    }
+
+    return opts;
+  }, [projects]);
+
   const totalActiveActionsCount = useMemo(() => {
     return projects.reduce((acc, p) => {
       return acc + (p.actions || []).filter((a) => a.status === 'Pendiente' || a.status === 'En proceso').length;
@@ -218,6 +258,7 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
     selectedPriorities.length > 0 ||
     selectedProjectCodes.length > 0 ||
     selectedResponsibles.length > 0 ||
+    selectedConsultants.length > 0 ||
     statusFilter !== 'all' ||
     searchTerm.trim() !== '';
 
@@ -227,6 +268,7 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
     setSelectedPriorities([]);
     setSelectedProjectCodes([]);
     setSelectedResponsibles([]);
+    setSelectedConsultants([]);
     setStatusFilter('all');
     setSearchTerm('');
   };
@@ -279,22 +321,39 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
         if (!hasMatchingActiveAction) return false;
       }
 
-      // 6. Status/Condition filters (pending actions / delayed)
+      // 6. Consultor SAP match (multi-select: handles multiple consultants per project and unassigned)
+      if (selectedConsultants.length > 0) {
+        const consultants = getProjectConsultants(p);
+        const matchesConsultant = selectedConsultants.some((sel) => {
+          if (sel === 'Sin consultor asignado') {
+            return consultants.length === 0;
+          }
+          return consultants.some(
+            (c) => (c.name || '').trim().toLowerCase() === sel.trim().toLowerCase()
+          );
+        });
+        if (!matchesConsultant) return false;
+      }
+
+      // 7. Status/Condition filters (pending actions / delayed)
       const health = storageService.getProjectHealth(p);
       if (statusFilter === 'pending-actions' && health.pendingActionsCount === 0) return false;
       if (statusFilter === 'delayed' && health.delayedStagesCount === 0 && health.overdueActionsCount === 0) return false;
 
-      // 7. Search match (code, title, area, state, action title, responsible)
+      // 8. Search match (code, title, area, state, consultant, action title, responsible)
       if (searchTerm.trim()) {
         const query = searchTerm.toLowerCase();
         const matchesCode = p.code.toLowerCase().includes(query);
         const matchesTitle = p.title.toLowerCase().includes(query);
         const matchesArea = p.area.toLowerCase().includes(query);
         const matchesState = p.state.toLowerCase().includes(query);
+        const matchesConsultant = (p.team || []).some(
+          (m) => (m.name || '').toLowerCase().includes(query) || (m.role || '').toLowerCase().includes(query)
+        );
         const matchesAction = p.actions.some(
           (a) => a.title.toLowerCase().includes(query) || a.responsible.toLowerCase().includes(query)
         );
-        if (!matchesCode && !matchesTitle && !matchesArea && !matchesState && !matchesAction) return false;
+        if (!matchesCode && !matchesTitle && !matchesArea && !matchesState && !matchesAction && !matchesConsultant) return false;
       }
 
       return true;
@@ -303,7 +362,7 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
       if (a.area !== b.area) return a.area.localeCompare(b.area);
       return a.priority - b.priority;
     });
-  }, [projects, selectedAreas, selectedStates, selectedPriorities, selectedProjectCodes, selectedResponsibles, statusFilter, searchTerm]);
+  }, [projects, selectedAreas, selectedStates, selectedPriorities, selectedProjectCodes, selectedResponsibles, selectedConsultants, statusFilter, searchTerm]);
 
   // Group filtered projects by area for structured sweeping
   const groupedByArea = useMemo<Record<string, SAPProject[]>>(() => {
@@ -501,6 +560,20 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
               />
             </div>
 
+            {/* Consultor SAP multi-select filter */}
+            <div className="flex items-center gap-1.5">
+              <UserCheck className="w-4 h-4 text-slate-400" />
+              <span className="text-xs font-semibold text-slate-600">Consultor:</span>
+              <MultiSelectDropdown
+                label="Filtrar por Consultor"
+                options={consultantOptions}
+                selectedValues={selectedConsultants}
+                onChange={setSelectedConsultants}
+                allLabel="Todos los Consultores"
+                totalCount={projects.length}
+              />
+            </div>
+
             {/* Status / Condition Quick Buttons */}
             <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
               <button
@@ -659,6 +732,22 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
                     onClick={() => setSelectedResponsibles(selectedResponsibles.filter((r) => r !== resp))}
                     className="hover:text-purple-950 font-bold ml-0.5 text-xs cursor-pointer"
                     title={`Quitar filtro responsable ${resp}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              {selectedConsultants.map((c) => (
+                <span
+                  key={c}
+                  className="inline-flex items-center gap-1 bg-cyan-50 border border-cyan-200 text-cyan-900 px-2 py-0.5 rounded-md font-medium text-[11px]"
+                >
+                  <UserCheck className="w-3 h-3 text-cyan-600" />
+                  Consultor: {c}
+                  <button
+                    onClick={() => setSelectedConsultants(selectedConsultants.filter((item) => item !== c))}
+                    className="hover:text-cyan-950 font-bold ml-0.5 text-xs cursor-pointer"
+                    title={`Quitar filtro consultor ${c}`}
                   >
                     ×
                   </button>
@@ -916,9 +1005,33 @@ export const WeeklyReviewView: React.FC<WeeklyReviewViewProps> = ({
                                     </div>
                                   )}
                                 </div>
-                                <span className="text-[10px] text-slate-500 block mt-0.5">
-                                  Creado por: <strong className="text-slate-700">{project.createdBy || 'Administrador General'}</strong>
-                                </span>
+                                <div className="flex items-center gap-2 flex-wrap mt-1">
+                                  <span className="text-[10px] text-slate-500">
+                                    Creado por: <strong className="text-slate-700">{project.createdBy || 'Administrador General'}</strong>
+                                  </span>
+                                  {(() => {
+                                    const consultants = getProjectConsultants(project);
+                                    if (consultants.length === 0) return null;
+                                    return (
+                                      <div className="flex items-center gap-1 flex-wrap text-[10px]">
+                                        <span className="text-slate-400">•</span>
+                                        <span className="font-semibold text-slate-600 flex items-center gap-0.5">
+                                          <UserCheck className="w-3 h-3 text-blue-600" />
+                                          Consultor{consultants.length > 1 ? 'es' : ''}:
+                                        </span>
+                                        {consultants.map((c, cIdx) => (
+                                          <span
+                                            key={c.id || `${c.name}-${cIdx}`}
+                                            className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-800 font-semibold border border-blue-200"
+                                            title={`Rol: ${c.role || 'Consultor SAP'}`}
+                                          >
+                                            {c.name}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
                               </div>
                             </div>
                           </div>

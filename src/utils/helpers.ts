@@ -1,4 +1,4 @@
-import { UserSession, StageAction, SAPProject, ProjectState, ActionComment } from '../types/project';
+import { UserSession, StageAction, SAPProject, ProjectState, ActionComment, TeamMember } from '../types/project';
 
 export function formatDateSpanish(dateString?: string): string {
   if (!dateString) return 'Sin definir';
@@ -423,4 +423,17 @@ export function downloadCSV(filename: string, rows: Record<string, any>[]): void
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+}
+
+/**
+ * Extracts all SAP consultants assigned to a project.
+ * Checks team members whose role contains 'consultor' (case-insensitive, e.g. 'Consultor SAP', 'Consultor').
+ */
+export function getProjectConsultants(project?: SAPProject | null): TeamMember[] {
+  if (!project || !project.team || !Array.isArray(project.team)) return [];
+  return project.team.filter((m) => {
+    if (!m || !m.name || !m.name.trim()) return false;
+    const roleLower = (m.role || '').trim().toLowerCase();
+    return roleLower.includes('consultor');
+  });
 }

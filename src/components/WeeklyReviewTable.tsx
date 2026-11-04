@@ -17,7 +17,8 @@ import {
   isActionOverdue,
   isActionDueSoon,
   getActionCommentsHistory,
-  parseActionTextWithLinks
+  parseActionTextWithLinks,
+  getProjectConsultants
 } from '../utils/helpers';
 import { 
   ExternalLink, 
@@ -25,6 +26,7 @@ import {
   MessageSquare, 
   Clock, 
   User, 
+  UserCheck,
   Paperclip,
   Edit3,
   Calendar,
@@ -103,8 +105,8 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
               <th className="py-2.5 px-2.5 w-[220px] max-w-[250px] min-w-[170px] border-r border-slate-700">Acción Pendiente</th>
               {/* 7. Responsable */}
               <th className="py-2.5 px-1.5 w-[90px] min-w-[86px] border-r border-slate-700">Responsable</th>
-              {/* 8. Vencimiento */}
-              <th className="py-2.5 px-1 text-center w-[78px] min-w-[74px] border-r border-slate-700">Vencimiento</th>
+              {/* 8. Consultor SAP */}
+              <th className="py-2.5 px-2 text-center w-[130px] min-w-[115px] border-r border-slate-700">Consultor SAP</th>
               {/* 9. Estado Acción */}
               <th className="py-2.5 px-1.5 text-center w-[112px] min-w-[108px] border-r border-slate-700">Estado Acción</th>
               {/* 10. Comentario / Avance */}
@@ -354,6 +356,24 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                                     ))}
                                   </div>
                                 )}
+                                {action.requiredDate && (
+                                  <div className="flex items-center gap-1 text-[10px] text-slate-500 pt-0.5">
+                                    <Clock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                                    <span>Vence:</span>
+                                    <span
+                                      className={`font-mono ${
+                                        isOverdue ? 'text-rose-600 font-bold' : isDueSoon ? 'text-amber-700 font-semibold' : 'text-slate-700 font-medium'
+                                      }`}
+                                    >
+                                      {formatDateSpanish(action.requiredDate)}
+                                    </span>
+                                    {isOverdue && (
+                                      <span className="text-[9px] font-black text-rose-700 bg-rose-50 border border-rose-200 px-1 rounded ml-0.5">
+                                        Vencida
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </>
                             )}
                           </div>
@@ -393,58 +413,83 @@ export const WeeklyReviewTable: React.FC<WeeklyReviewTableProps> = ({
                       )}
                     </td>
 
-                    {/* 8. Vencimiento */}
-                    <td className="py-2 px-1 text-center border-r border-slate-200 align-top w-[78px] min-w-[74px]">
-                      {action ? (
-                        <div
-                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-medium text-[10.5px] ${
-                            isOverdue
-                              ? 'bg-rose-100 text-rose-800 font-bold border border-rose-200'
-                              : isDueSoon
-                              ? 'bg-amber-100 text-amber-800 font-semibold border border-amber-200'
-                              : 'text-slate-700 bg-slate-100/70 border border-slate-200'
-                          }`}
-                          title={isOverdue ? 'Acción vencida' : isDueSoon ? 'Vence pronto' : 'Fecha límite'}
-                        >
-                          <Clock className="w-2.5 h-2.5 shrink-0" />
-                          <span className="whitespace-nowrap font-mono">{formatDateSpanish(action.requiredDate)}</span>
-                          {isOverdue && <span className="text-[10px] text-rose-600 font-bold">!</span>}
-                        </div>
-                      ) : (
-                        <span className="text-slate-300 text-center block">—</span>
-                      )}
-                    </td>
+                    {/* 8. Consultor SAP (A nivel proyecto con rowSpan, apilados uno debajo del otro) */}
+                    {isFirstRowOfProject && (
+                      <td
+                        rowSpan={spanCount}
+                        className={`${projectBgClass} py-2 px-2 border-r border-slate-200 align-top w-[130px] min-w-[115px]`}
+                      >
+                        {(() => {
+                          const consultants = getProjectConsultants(project);
+                          if (consultants.length === 0) {
+                            return (
+                              <span className="text-slate-400 italic text-[10.5px] block text-center py-1 select-none">
+                                — Sin asignar —
+                              </span>
+                            );
+                          }
+                          return (
+                            <div className="flex flex-col gap-1.5 w-full">
+                              {consultants.map((c, cIdx) => (
+                                <div
+                                  key={c.id || `${c.name}-${cIdx}`}
+                                  className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50/80 border border-blue-200/80 text-blue-900 text-[10.5px] font-semibold leading-tight shadow-2xs group hover:bg-blue-100 transition-colors"
+                                  title={`Consultor SAP: ${c.name}${c.role ? ` (${c.role})` : ''}${c.email ? ` • ${c.email}` : ''}`}
+                                >
+                                  <UserCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                  <span className="truncate max-w-[100px]">{c.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </td>
+                    )}
 
                     {/* 9. Estado Acción (Desplegable para evitar clics accidentales) */}
                     <td className="py-2 px-1.5 text-center border-r border-slate-200 align-top w-[112px] min-w-[108px]">
                       {action ? (
-                        <select
-                          value={action.status}
-                          disabled={!canEditAct}
-                          onChange={(e) => onActionStatusChange(project, action, e.target.value as ActionStatus)}
-                          className={`w-full text-[10.5px] font-bold rounded px-1.5 py-1 border shadow-2xs cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                            action.status === 'Finalizada'
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                              : action.status === 'En proceso'
-                              ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
-                              : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
-                          } ${!canEditAct ? 'opacity-70 cursor-not-allowed' : ''}`}
-                          title={
-                            canEditAct
-                              ? `Cambiar estado de la acción`
-                              : `Solo ${action.responsible} o PMO pueden editar`
-                          }
-                        >
-                          <option value="Pendiente" className="bg-white text-slate-800 font-semibold">
-                            Pendiente
-                          </option>
-                          <option value="En proceso" className="bg-white text-slate-800 font-semibold">
-                            En proceso
-                          </option>
-                          <option value="Finalizada" className="bg-white text-slate-800 font-semibold">
-                            Finalizada
-                          </option>
-                        </select>
+                        <>
+                          <select
+                            value={action.status}
+                            disabled={!canEditAct}
+                            onChange={(e) => onActionStatusChange(project, action, e.target.value as ActionStatus)}
+                            className={`w-full text-[10.5px] font-bold rounded px-1.5 py-1 border shadow-2xs cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                              action.status === 'Finalizada'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                : action.status === 'En proceso'
+                                ? 'bg-blue-50 text-blue-800 border-blue-300 hover:bg-blue-100'
+                                : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                            } ${!canEditAct ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            title={
+                              canEditAct
+                                ? `Cambiar estado de la acción`
+                                : `Solo ${action.responsible} o PMO pueden editar`
+                            }
+                          >
+                            <option value="Pendiente" className="bg-white text-slate-800 font-semibold">
+                              Pendiente
+                            </option>
+                            <option value="En proceso" className="bg-white text-slate-800 font-semibold">
+                              En proceso
+                            </option>
+                            <option value="Finalizada" className="bg-white text-slate-800 font-semibold">
+                              Finalizada
+                            </option>
+                          </select>
+                          {action.requiredDate && (
+                            <div
+                              className="mt-1 flex items-center justify-center gap-1 text-[9.5px] font-mono text-slate-500"
+                              title={`Fecha límite de la acción: ${formatDateSpanish(action.requiredDate)}`}
+                            >
+                              <Clock className="w-2.5 h-2.5 shrink-0 text-slate-400" />
+                              <span className={isOverdue ? 'text-rose-600 font-bold' : isDueSoon ? 'text-amber-700 font-semibold' : 'text-slate-600'}>
+                                {formatDateSpanish(action.requiredDate)}
+                              </span>
+                              {isOverdue && <span className="text-rose-600 font-bold">!</span>}
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <span className="text-slate-300 text-center block">—</span>
                       )}
