@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx';
 import { UserSession, StageAction, SAPProject, ProjectState, ActionComment, TeamMember } from '../types/project';
 
 export function formatDateSpanish(dateString?: string): string {
@@ -423,6 +424,47 @@ export function downloadCSV(filename: string, rows: Record<string, any>[]): void
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Export array of objects to an .xlsx workbook (compatible with Google Sheets and Excel)
+ */
+export function downloadXLSX(
+  filename: string,
+  rows: Record<string, string | number>[],
+  sheetName = 'Priorización'
+): void {
+  if (!rows || !rows.length) return;
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const keys = Object.keys(rows[0]);
+
+  worksheet['!cols'] = keys.map((key) => {
+    const maxCellLen = rows.reduce((max, row) => {
+      const val = row[key] !== undefined && row[key] !== null ? String(row[key]) : '';
+      return Math.max(max, val.length);
+    }, key.length);
+    return { wch: Math.min(Math.max(maxCellLen + 3, 10), 60) };
+  });
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
+
+  const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([wbout], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /**

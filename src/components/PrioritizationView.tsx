@@ -15,7 +15,9 @@ import {
   CheckCircle2,
   RotateCcw,
   Info,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { downloadXLSX } from '../utils/helpers';
 import { MultiSelectDropdown, MultiSelectOption } from './MultiSelectDropdown';
 
 interface PrioritizationViewProps {
@@ -309,6 +311,24 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
     }, 2000);
   };
 
+  // Export visible prioritization table (respecting active filters and current visual order)
+  const handleExportSpreadsheet = () => {
+    if (displayedProjects.length === 0) return;
+
+    const rows = displayedProjects.map((project) => ({
+      'Prioridad': project.priority ?? 1,
+      'Área': project.area || '',
+      'Código': project.code || '',
+      'Proyecto': project.title || '',
+      'Creado por': project.createdBy || '',
+      'Estado / Etapa': project.state || '',
+      'Módulos SAP': (project.sapModules || []).join(', '),
+    }));
+
+    const today = new Date().toISOString().split('T')[0];
+    downloadXLSX(`Priorizacion_Proyectos_SAP_${today}.xlsx`, rows, 'Priorización Proyectos');
+  };
+
   // Helper for state badge styling
   const getStateBadgeClass = (state: string) => {
     if (state.includes('01')) return 'bg-slate-100 text-slate-700 border-slate-300';
@@ -591,6 +611,20 @@ export const PrioritizationView: React.FC<PrioritizationViewProps> = ({
             >
               <ArrowUpDown className="w-3.5 h-3.5" />
               <span>Ordenar por prioridad</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportSpreadsheet}
+              disabled={displayedProjects.length === 0}
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-lg text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
+              title={
+                displayedProjects.length === 0
+                  ? 'No hay proyectos visibles para descargar'
+                  : `Descargar planilla (.xlsx compatible con Google Sheets y Excel) con los ${displayedProjects.length} proyectos visibles en el orden actual`
+              }
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Descargar Planilla ({displayedProjects.length})</span>
             </button>
           </div>
         </div>
